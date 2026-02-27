@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LAX Token Staking Dashboard</title>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding-bottom: 80px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            padding: 15px 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .wallet-btn {
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .container {
+            padding: 15px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-card.large {
+            grid-column: span 2;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-value.small {
+            font-size: 18px;
+        }
+
+        .stat-change {
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .stat-change.positive {
+            color: #2ecc71;
+        }
+
+        .stat-change.negative {
+            color: #e74c3c;
+        }
+
+        .section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .time-filter {
+            display: flex;
+            gap: 5px;
+        }
+
+        .filter-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #888;
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .filter-btn.active {
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+            color: white;
+        }
+
+        .chart-container {
+            height: 200px;
+            margin-bottom: 15px;
+        }
+
+        .staking-table {
+            width: 100%;
+        }
+
+        .staking-table th {
+            text-align: left;
+            font-size: 12px;
+            color: #888;
+            padding: 10px 5px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .staking-table td {
+            padding: 12px 5px;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .staking-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .amount {
+            font-weight: 600;
+        }
+
+        .status {
+            padding: 4px 10px;
+            border-radius: 10px;
+            font-size: 11px;
+        }
+
+        .status.staking {
+            background: rgba(46, 204, 113, 0.2);
+            color: #2ecc71;
+        }
+
+        .status.unstaking {
+            background: rgba(231, 76, 60, 0.2);
+            color: #e74c3c;
+        }
+
+        .action-btn {
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+            border: none;
+            color: white;
+            padding: 15px;
+            border-radius: 15px;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #f39c12;
+            border-radius: 50%;
+            margin: 0 auto 15px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(26, 26, 46, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-around;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #888;
+            font-size: 10px;
+            cursor: pointer;
+            padding: 5px 15px;
+        }
+
+        .nav-item.active {
+            color: #f39c12;
+        }
+
+        .nav-icon {
+            font-size: 20px;
+            margin-bottom: 3px;
+        }
+
+        .apy-badge {
+            background: linear-gradient(90deg, #2ecc71, #27ae60);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .refresh-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #fff;
+            padding: 8px 15px;
+            border-radius: 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .wallet-info {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .user-staking-info {
+            background: rgba(243, 156, 18, 0.1);
+            border: 1px solid rgba(243, 156, 18, 0.3);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .user-staking-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+        }
+
+        .user-staking-label {
+            color: #888;
+        }
+
+        .user-staking-value {
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">🔒 LAX Staking</div>
+            <div>
+                <button class="wallet-btn" id="connectWallet" onclick="connectWallet()">连接钱包</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Wallet Info -->
+        <div id="walletSection" style="display: none;">
+            <div class="wallet-info" id="walletAddress"></div>
+        </div>
+
+        <!-- User Staking Info -->
+        <div id="userStakingSection" style="display: none;">
+            <div class="user-staking-info">
+                <div class="user-staking-row">
+                    <span class="user-staking-label">已质押 LAX</span>
+                    <span class="user-staking-value" id="userStaked">0 LAX</span>
+                </div>
+                <div class="user-staking-row">
+                    <span class="user-staking-label">待领取奖励</span>
+                    <span class="user-staking-value" id="userRewards">0 LAX</span>
+                </div>
+                <div class="user-staking-row">
+                    <span class="user-staking-label">累计收益</span>
+                    <span class="user-staking-value" id="userTotalEarned">0 LAX</span>
+                </div>
+            </div>
+            <button class="action-btn" id="claimBtn" onclick="claimRewards()" disabled>领取奖励</button>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card large">
+                <div class="stat-label">总质押量</div>
+                <div class="stat-value" id="totalStaked">0 LAX</div>
+                <div class="stat-change positive" id="stakedChange">+0% 24h</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">质押人数</div>
+                <div class="stat-value small" id="stakersCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">APY</div>
+                <div class="stat-value small" id="apyValue">0%</div>
+            </div>
+        </div>
+
+        <!-- Chart Section -->
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">质押趋势</div>
+                <div class="time-filter">
+                    <button class="filter-btn active" onclick="setTimeframe('day', this)">日</button>
+                    <button class="filter-btn" onclick="setTimeframe('week', this)">周</button>
+                    <button class="filter-btn" onclick="setTimeframe('month', this)">月</button>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="stakingChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Staking History -->
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">质押记录</div>
+                <button class="refresh-btn" onclick="loadHistory()">刷新</button>
+            </div>
+            <div id="historyContent">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <div>加载中...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="section">
+            <div class="section-title">快速操作</div>
+            <button class="action-btn" id="stakeBtn" onclick="stake()" disabled>质押 LAX</button>
+            <button class="action-btn" id="unstakeBtn" onclick="unstake()" style="background: linear-gradient(90deg, #e74c3c, #c0392b);" disabled>解除质押</button>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+        <div class="nav-item active">
+            <div class="nav-icon">📊</div>
+            <div>统计</div>
+        </div>
+        <div class="nav-item">
+            <div class="nav-icon">💰</div>
+            <div>质押</div>
+        </div>
+        <div class="nav-item">
+            <div class="nav-icon">🏆</div>
+            <div>排行</div>
+        </div>
+        <div class="nav-item">
+            <div class="nav-icon">⚙️</div>
+            <div>设置</div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const CONFIG = {
+            LAX_TOKEN: '0x7f9bd73e51e66e0b2c7a87db0ca530a11eb7a7e9',
+            STAKING_CONTRACT: '0x7f9bd73e51e66e0b2c7a87db0ca530a11eb7a7e9',
+            BSC_RPC: 'https://bsc-dataseed.binance.org/',
+            DECIMALS: 18
+        };
+
+        // State
+        let provider = null;
+        let signer = null;
+        let userAddress = null;
+        let currentTimeframe = 'day';
+        let stakingChart = null;
+
+        // ABI for staking functions
+        const STAKING_ABI = [
+            "function totalStaked() view returns (uint256)",
+            "function stakersCount() view returns (uint256)",
+            "function getAPY() view returns (uint256)",
+            "function userInfo(address) view returns (uint256 amount, uint256 rewards, uint256 lastUpdate)",
+            "function stake(uint256 amount)",
+            "function unstake(uint256 amount)",
+            "function claimRewards()"
+        ];
+
+        // Initialize
+        async function init() {
+            // Check if wallet exists
+            if (typeof window.ethereum !== 'undefined') {
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                try {
+                    const accounts = await provider.send("eth_requestAccounts", []);
+                    if (accounts.length > 0) {
+                        await connectWallet();
+                    }
+                } catch (e) {
+                    console.log('Wallet not connected');
+                }
+            }
+
+            // Load initial data
+            loadDashboardData();
+        }
+
+        // Connect Wallet
+        async function connectWallet() {
+            if (typeof window.ethereum === 'undefined') {
+                alert('请使用 TokenPocket 或 MetaMask 钱包访问');
+                return;
+            }
+
+            try {
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                const accounts = await provider.send("eth_requestAccounts", []);
+                signer = provider.getSigner();
+                userAddress = await signer.getAddress();
+
+                document.getElementById('connectWallet').textContent =
+                    userAddress.substring(0, 6) + '...' + userAddress.substring(38);
+                document.getElementById('walletAddress').textContent =
+                    '已连接: ' + userAddress.substring(0, 10) + '...';
+
+                document.getElementById('walletSection').style.display = 'block';
+                document.getElementById('userStakingSection').style.display = 'block';
+
+                // Enable action buttons
+                document.getElementById('claimBtn').disabled = false;
+                document.getElementById('stakeBtn').disabled = false;
+                document.getElementById('unstakeBtn').disabled = false;
+
+                // Load user data
+                loadUserData();
+            } catch (error) {
+                console.error('Connection error:', error);
+                alert('连接钱包失败: ' + error.message);
+            }
+        }
+
+        // Load Dashboard Data
+        async function loadDashboardData() {
+            try {
+                // Connect to BSC
+                const rpcProvider = new ethers.providers.JsonRpcProvider(CONFIG.BSC_RPC);
+                const contract = new ethers.Contract(CONFIG.STAKING_CONTRACT, STAKING_ABI, rpcProvider);
+
+                // Get total staked (using balance of contract as proxy)
+                const balance = await rpcProvider.getBalance(CONFIG.STAKING_CONTRACT);
+                // This is a placeholder - real implementation would call contract functions
+
+                // Mock data for demo
+                updateStats({
+                    totalStaked: 450000,
+                    stakersCount: 1234,
+                    apy: 365
+                });
+
+                // Load chart
+                initChart();
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            }
+        }
+
+        // Load User Data
+        async function loadUserData() {
+            try {
+                // Mock data for demo
+                document.getElementById('userStaked').textContent = '1,250 LAX';
+                document.getElementById('userRewards').textContent = '45.8 LAX';
+                document.getElementById('userTotalEarned').textContent = '520 LAX';
+            } catch (error) {
+                console.error('Error loading user data:', error);
+            }
+        }
+
+        // Update Stats Display
+        function updateStats(data) {
+            document.getElementById('totalStaked').textContent =
+                data.totalStaked.toLocaleString() + ' LAX';
+            document.getElementById('stakersCount').textContent =
+                data.stakersCount.toLocaleString();
+            document.getElementById('apyValue').textContent = data.apy + '%';
+        }
+
+        // Initialize Chart
+        function initChart() {
+            const ctx = document.getElementById('stakingChart').getContext('2d');
+
+            const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+            gradient.addColorStop(0, 'rgba(243, 156, 18, 0.5)');
+            gradient.addColorStop(1, 'rgba(243, 156, 18, 0)');
+
+            stakingChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: getTimeLabels('day'),
+                    datasets: [{
+                        label: '质押量',
+                        data: [420000, 425000, 430000, 435000, 440000, 445000, 450000],
+                        borderColor: '#f39c12',
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#888', font: { size: 10 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: {
+                                color: '#888',
+                                font: { size: 10 },
+                                callback: value => (value / 1000) + 'K'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Get Time Labels
+        function getTimeLabels(timeframe) {
+            const labels = {
+                day: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
+                week: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                month: ['第1周', '第2周', '第3周', '第4周']
+            };
+            return labels[timeframe] || labels.day;
+        }
+
+        // Set Timeframe
+        function setTimeframe(timeframe, btn) {
+            currentTimeframe = timeframe;
+
+            // Update active button
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Update chart
+            if (stakingChart) {
+                stakingChart.data.labels = getTimeLabels(timeframe);
+                stakingChart.update();
+            }
+        }
+
+        // Load History
+        async function loadHistory() {
+            const historyData = [
+                { date: '2024-02-20', type: '质押', amount: 500, status: 'staking' },
+                { date: '2024-02-18', type: '解除质押', amount: 200, status: 'unstaking' },
+                { date: '2024-02-15', type: '领取奖励', amount: 45.8, status: 'complete' },
+                { date: '2024-02-10', type: '质押', amount: 1000, status: 'staking' },
+            ];
+
+            let html = '<table class="staking-table"><thead><tr>' +
+                '<th>日期</th><th>类型</th><th>数量</th><th>状态</th></tr></thead><tbody>';
+
+            historyData.forEach(item => {
+                html += `<tr>
+                    <td>${item.date}</td>
+                    <td>${item.type}</td>
+                    <td class="amount">${item.amount} LAX</td>
+                    <td><span class="status ${item.status}">${getStatusText(item.status)}</span></td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('historyContent').innerHTML = html;
+        }
+
+        function getStatusText(status) {
+            const texts = {
+                staking: '质押中',
+                unstaking: '解除中',
+                complete: '已完成'
+            };
+            return texts[status] || status;
+        }
+
+        // Staking Functions
+        async function stake() {
+            if (!userAddress) {
+                alert('请先连接钱包');
+                return;
+            }
+            // TODO: Implement staking logic
+            alert('质押功能开发中...\n\n实际部署时需要:\n1. 调用合约的 stake() 函数\n2. 用户授权代币\n3. 显示交易进度');
+        }
+
+        async function unstake() {
+            if (!userAddress) {
+                alert('请先连接钱包');
+                return;
+            }
+            alert('解除质押功能开发中...');
+        }
+
+        async function claimRewards() {
+            if (!userAddress) {
+                alert('请先连接钱包');
+                return;
+            }
+            alert('领取奖励功能开发中...');
+        }
+
+        // Initialize on load
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
