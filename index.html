@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LAX Token Staking Dashboard</title>
-    <!-- 同时加载多个CDN，哪个先成功用哪个 -->
+    <title>LAX 质押数据统计</title>
+    <!-- 使用可靠的 CDN -->
     <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
@@ -15,71 +15,113 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f1e;
             min-height: 100vh;
             color: #fff;
-            padding-bottom: 80px;
         }
 
         .header {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
+            background: linear-gradient(90deg, #1a1a3e 0%, #2a2a5e 100%);
             padding: 15px 20px;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .header-content {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
         }
 
         .logo {
-            font-size: 24px;
+            font-size: 20px;
             font-weight: bold;
             background: linear-gradient(90deg, #f39c12, #e74c3c);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .wallet-btn {
-            background: linear-gradient(90deg, #f39c12, #e74c3c);
-            border: none;
-            color: white;
+        .nav-tabs {
+            display: flex;
+            background: rgba(255,255,255,0.05);
             padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 600;
+            gap: 20px;
+        }
+
+        .nav-tab {
+            padding: 10px 20px;
             cursor: pointer;
+            opacity: 0.6;
+            transition: all 0.3s;
+        }
+
+        .nav-tab.active {
+            opacity: 1;
+            border-bottom: 2px solid #f39c12;
         }
 
         .container {
-            padding: 15px;
-            max-width: 600px;
+            padding: 20px;
+            max-width: 800px;
             margin: 0 auto;
         }
 
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #f39c12;
+        }
+
+        .date-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
             margin-bottom: 20px;
         }
 
-        .stat-card {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 15px;
-            padding: 15px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        .date-selector input {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
         }
 
-        .stat-card.large {
-            grid-column: span 2;
+        .btn {
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+            border: none;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .stat-item {
+            background: rgba(255,255,255,0.03);
+            padding: 15px;
+            border-radius: 10px;
         }
 
         .stat-label {
@@ -89,135 +131,17 @@
         }
 
         .stat-value {
-            font-size: 24px;
+            font-size: 20px;
             font-weight: bold;
-            background: linear-gradient(90deg, #f39c12, #e74c3c);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
         }
 
-        .stat-value.small {
-            font-size: 18px;
-        }
-
-        .stat-change {
-            font-size: 12px;
-            margin-top: 5px;
-        }
-
-        .stat-change.positive {
-            color: #2ecc71;
-        }
-
-        .stat-change.negative {
-            color: #e74c3c;
-        }
-
-        .section {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 15px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .section-title {
-            font-size: 16px;
-            font-weight: 600;
-        }
-
-        .time-filter {
-            display: flex;
-            gap: 5px;
-        }
-
-        .filter-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
-            color: #888;
-            padding: 6px 12px;
-            border-radius: 15px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .filter-btn.active {
-            background: linear-gradient(90deg, #f39c12, #e74c3c);
-            color: white;
+        .highlight {
+            color: #f39c12;
         }
 
         .chart-container {
-            height: 200px;
-            margin-bottom: 15px;
-        }
-
-        .staking-table {
-            width: 100%;
-        }
-
-        .staking-table th {
-            text-align: left;
-            font-size: 12px;
-            color: #888;
-            padding: 10px 5px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .staking-table td {
-            padding: 12px 5px;
-            font-size: 14px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .staking-table tr:last-child td {
-            border-bottom: none;
-        }
-
-        .amount {
-            font-weight: 600;
-        }
-
-        .status {
-            padding: 4px 10px;
-            border-radius: 10px;
-            font-size: 11px;
-        }
-
-        .status.staking {
-            background: rgba(46, 204, 113, 0.2);
-            color: #2ecc71;
-        }
-
-        .status.unstaking {
-            background: rgba(231, 76, 60, 0.2);
-            color: #e74c3c;
-        }
-
-        .action-btn {
-            background: linear-gradient(90deg, #f39c12, #e74c3c);
-            border: none;
-            color: white;
-            padding: 15px;
-            border-radius: 15px;
-            font-size: 16px;
-            font-weight: 600;
-            width: 100%;
-            cursor: pointer;
-            margin-top: 10px;
-        }
-
-        .action-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+            height: 250px;
+            margin: 20px 0;
         }
 
         .loading {
@@ -229,7 +153,7 @@
         .spinner {
             width: 40px;
             height: 40px;
-            border: 3px solid rgba(255, 255, 255, 0.1);
+            border: 3px solid rgba(255,255,255,0.1);
             border-top-color: #f39c12;
             border-radius: 50%;
             margin: 0 auto 15px;
@@ -240,446 +164,374 @@
             to { transform: rotate(360deg); }
         }
 
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(26, 26, 46, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 10px 20px;
-            display: flex;
-            justify-content: space-around;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .nav-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            color: #888;
-            font-size: 10px;
-            cursor: pointer;
-            padding: 5px 15px;
-        }
-
-        .nav-item.active {
-            color: #f39c12;
-        }
-
-        .nav-icon {
-            font-size: 20px;
-            margin-bottom: 3px;
-        }
-
-        .apy-badge {
-            background: linear-gradient(90deg, #2ecc71, #27ae60);
-            color: white;
-            padding: 5px 12px;
-            border-radius: 15px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .refresh-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
-            color: #fff;
-            padding: 8px 15px;
-            border-radius: 10px;
-            font-size: 12px;
-            cursor: pointer;
-        }
-
-        .wallet-info {
-            font-size: 12px;
-            color: #888;
-        }
-
-        .user-staking-info {
-            background: rgba(243, 156, 18, 0.1);
-            border: 1px solid rgba(243, 156, 18, 0.3);
-            border-radius: 15px;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-
-        .user-staking-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-        }
-
-        .user-staking-label {
-            color: #888;
-        }
-
-        .user-staking-value {
-            font-weight: 600;
-        }
-
-        .error-banner {
+        .error {
             background: rgba(231, 76, 60, 0.2);
             border: 1px solid rgba(231, 76, 60, 0.5);
             border-radius: 10px;
             padding: 15px;
-            margin-bottom: 15px;
             text-align: center;
         }
 
-        .loading-status {
-            background: rgba(243, 156, 18, 0.1);
-            border: 1px solid rgba(243, 156, 18, 0.3);
-            border-radius: 10px;
-            padding: 10px;
-            margin-bottom: 15px;
-            text-align: center;
+        .period-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .period-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
             font-size: 12px;
+        }
+
+        .period-btn.active {
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+            border-color: transparent;
+        }
+
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .data-row:last-child {
+            border-bottom: none;
+        }
+
+        .data-label {
+            color: #888;
+        }
+
+        .data-value {
+            font-weight: 600;
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="header-content">
-            <div class="logo">🔒 LAX Staking</div>
-            <div>
-                <button class="wallet-btn" id="connectWallet" onclick="connectWallet()">连接钱包</button>
-            </div>
-        </div>
+        <div class="logo">LAX 质押统计</div>
     </div>
 
-    <!-- Loading Status -->
+    <div class="nav-tabs">
+        <div class="nav-tab active" onclick="switchPage('dashboard')">每日统计</div>
+        <div class="nav-tab" onclick="switchPage('period')">时间段统计</div>
+        <div class="nav-tab" onclick="switchPage('redeemable')">到期查询</div>
+    </div>
+
     <div class="container">
-        <div id="loadingStatus" class="loading-status">
-            正在加载 Web3 库...
-        </div>
-    </div>
-
-    <div class="container" id="mainContent" style="display: none;">
-        <!-- Wallet Info -->
-        <div id="walletSection" style="display: none;">
-            <div class="wallet-info" id="walletAddress"></div>
-        </div>
-
-        <!-- User Staking Info -->
-        <div id="userStakingSection" style="display: none;">
-            <div class="user-staking-info">
-                <div class="user-staking-row">
-                    <span class="user-staking-label">已质押 LAX</span>
-                    <span class="user-staking-value" id="userStaked">0 LAX</span>
+        <!-- 每日统计页面 -->
+        <div id="page-dashboard" class="page active">
+            <div class="card">
+                <div class="card-title">指定日期质押统计</div>
+                <div class="date-selector">
+                    <label>选择日期:</label>
+                    <input type="date" id="dailyDate">
+                    <button class="btn" onclick="loadDailyStats()">查询</button>
                 </div>
-                <div class="user-staking-row">
-                    <span class="user-staking-label">待领取奖励</span>
-                    <span class="user-staking-value" id="userRewards">0 LAX</span>
-                </div>
-                <div class="user-staking-row">
-                    <span class="user-staking-label">累计收益</span>
-                    <span class="user-staking-value" id="userTotalEarned">0 LAX</span>
-                </div>
-            </div>
-            <button class="action-btn" id="claimBtn" onclick="claimRewards()" disabled>领取奖励</button>
-        </div>
 
-        <!-- Stats Grid -->
-        <div class="stats-grid">
-            <div class="stat-card large">
-                <div class="stat-label">总质押量</div>
-                <div class="stat-value" id="totalStaked">0 LAX</div>
-                <div class="stat-change positive" id="stakedChange">+0% 24h</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">质押人数</div>
-                <div class="stat-value small" id="stakersCount">0</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">APY</div>
-                <div class="stat-value small" id="apyValue">0%</div>
-            </div>
-        </div>
-
-        <!-- Chart Section -->
-        <div class="section">
-            <div class="section-header">
-                <div class="section-title">质押趋势</div>
-                <div class="time-filter">
-                    <button class="filter-btn active" onclick="setTimeframe('day', this)">日</button>
-                    <button class="filter-btn" onclick="setTimeframe('week', this)">周</button>
-                    <button class="filter-btn" onclick="setTimeframe('month', this)">月</button>
+                <div id="dailyStats" class="stat-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">1天质押金额</div>
+                        <div class="stat-value" id="stake1d">0.00 LAX</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">7天质押金额</div>
+                        <div class="stat-value" id="stake7d">0.00 LAX</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">15天质押金额</div>
+                        <div class="stat-value" id="stake15d">0.00 LAX</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">30天质押金额</div>
+                        <div class="stat-value" id="stake30d">0.00 LAX</div>
+                    </div>
                 </div>
-            </div>
-            <div class="chart-container">
-                <canvas id="stakingChart"></canvas>
-            </div>
-        </div>
 
-        <!-- Staking History -->
-        <div class="section">
-            <div class="section-header">
-                <div class="section-title">质押记录</div>
-                <button class="refresh-btn" onclick="loadHistory()">刷新</button>
-            </div>
-            <div id="historyContent">
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <div>加载中...</div>
+                <div style="margin-top: 20px;">
+                    <div class="stat-item" style="background: rgba(243, 156, 18, 0.1);">
+                        <div class="stat-label">当天总质押金额</div>
+                        <div class="stat-value highlight" id="stakeTotal">0.00 LAX</div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Quick Actions -->
-        <div class="section">
-            <div class="section-title">快速操作</div>
-            <button class="action-btn" id="stakeBtn" onclick="stake()" disabled>质押 LAX</button>
-            <button class="action-btn" id="unstakeBtn" onclick="unstake()" style="background: linear-gradient(90deg, #e74c3c, #c0392b);" disabled>解除质押</button>
-        </div>
-    </div>
+        <!-- 时间段统计页面 -->
+        <div id="page-period" class="page">
+            <div class="card">
+                <div class="card-title">每日质押量趋势</div>
+                <div class="period-selector">
+                    <button class="period-btn active" onclick="loadPeriodData(7)">最近7天</button>
+                    <button class="period-btn" onclick="loadPeriodData(30)">最近30天</button>
+                    <button class="period-btn" onclick="loadPeriodData(90)">最近90天</button>
+                </div>
 
-    <!-- Bottom Navigation -->
-    <div class="bottom-nav">
-        <div class="nav-item active">
-            <div class="nav-icon">📊</div>
-            <div>统计</div>
+                <div class="chart-container">
+                    <canvas id="periodChart"></canvas>
+                </div>
+
+                <div class="stat-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">累计新增质押</div>
+                        <div class="stat-value highlight" id="totalNewStaked">0.00</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">仍在质押</div>
+                        <div class="stat-value" id="stillStaked">0.00</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">当前可解押</div>
+                        <div class="stat-value" id="currentRedeemable">0.00</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">数据点数</div>
+                        <div class="stat-value" id="dataPoints">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">未来可解押金额</div>
+                <div id="redeemableList">
+                    <div class="data-row">
+                        <span class="data-label">未来1天后可解押</span>
+                        <span class="data-value" id="redeem1d">0.00 LAX</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">未来2天后可解押</span>
+                        <span class="data-value" id="redeem2d">0.00 LAX</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">未来7天后可解押</span>
+                        <span class="data-value" id="redeem7d">0.00 LAX</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">未来15天后可解押</span>
+                        <span class="data-value" id="redeem15d">0.00 LAX</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">未来30天后可解押</span>
+                        <span class="data-value" id="redeem30d">0.00 LAX</span>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="nav-item">
-            <div class="nav-icon">💰</div>
-            <div>质押</div>
-        </div>
-        <div class="nav-item">
-            <div class="nav-icon">🏆</div>
-            <div>排行</div>
-        </div>
-        <div class="nav-item">
-            <div class="nav-icon">⚙️</div>
-            <div>设置</div>
+
+        <!-- 到期查询页面 -->
+        <div id="page-redeemable" class="page">
+            <div class="card">
+                <div class="card-title">查询到期金额</div>
+                <div class="date-selector">
+                    <label>选择日期 (今天之后):</label>
+                    <input type="date" id="redeemDate">
+                    <button class="btn" onclick="loadRedeemable()">查询</button>
+                </div>
+
+                <div id="redeemResult" style="display: none;">
+                    <div class="stat-item" style="background: rgba(46, 204, 113, 0.1); margin-bottom: 15px;">
+                        <div class="stat-label">到期金额</div>
+                        <div class="stat-value highlight" id="redeemAmount">0.00 LAX</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">距离天数</div>
+                        <div class="stat-value" id="redeemDays">0 天</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        // Configuration
-        const CONFIG = {
-            LAX_TOKEN: '0x7f9bd73e51e66e0b2c7a87db0ca530a11eb7a7e9',
-            STAKING_CONTRACT: '0x7f9bd73e51e66e0b2c7a87db0ca530a11eb7a7e9',
-            BSC_RPC: 'https://bsc-dataseed.binance.org/',
-            DECIMALS: 18
-        };
+        // API 配置
+        const API_BASE = 'http://localhost:5000/api';
+        // 部署时改为实际 API 地址
+        // const API_BASE = 'https://your-api.com/api';
 
-        // State
-        let provider = null;
-        let signer = null;
-        let userAddress = null;
-        let currentTimeframe = 'day';
-        let stakingChart = null;
-        let ethersLoaded = false;
-        let chartLoaded = false;
+        let periodChart = null;
 
-        // ABI for staking functions
-        const STAKING_ABI = [
-            "function totalStaked() view returns (uint256)",
-            "function stakersCount() view returns (uint256)",
-            "function getAPY() view returns (uint256)",
-            "function userInfo(address) view returns (uint256 amount, uint256 rewards, uint256 lastUpdate)",
-            "function stake(uint256 amount)",
-            "function unstake(uint256 amount)",
-            "function claimRewards()"
-        ];
+        // 初始化日期选择器
+        document.addEventListener('DOMContentLoaded', function() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('dailyDate').value = today;
 
-        // Check libraries are loaded
-        function checkLibraries() {
-            const loadingStatus = document.getElementById('loadingStatus');
-            let loadedCount = 0;
-            let totalCount = 2;
+            // 设置可选择的日期范围
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = tomorrow.toISOString().split('T')[0];
+            document.getElementById('redeemDate').min = tomorrowStr;
+            document.getElementById('redeemDate').value = tomorrowStr;
 
-            // Check ethers
-            if (typeof ethers !== 'undefined') {
-                ethersLoaded = true;
-                loadedCount++;
-                console.log('Ethers.js loaded');
-            } else {
-                console.warn('Ethers.js not loaded yet');
-            }
+            // 自动加载今日数据
+            loadDailyStats();
+            loadPeriodData(7);
+        });
 
-            // Check Chart
-            if (typeof Chart !== 'undefined') {
-                chartLoaded = true;
-                loadedCount++;
-                console.log('Chart.js loaded');
-            } else {
-                console.warn('Chart.js not loaded yet');
-            }
+        function switchPage(page) {
+            // 隐藏所有页面
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
 
-            // Update status
-            if (loadedCount < totalCount) {
-                loadingStatus.innerHTML = `正在加载库 (${loadedCount}/${totalCount})...`;
-                return false;
-            }
-
-            // All loaded
-            loadingStatus.style.display = 'none';
-            document.getElementById('mainContent').style.display = 'block';
-            console.log('All libraries loaded!');
-            return true;
+            // 显示选中页面
+            document.getElementById('page-' + page).classList.add('active');
+            event.target.classList.add('active');
         }
 
-        // Initialize
-        async function init() {
-            console.log('Initializing app...');
+        async function loadDailyStats() {
+            const date = document.getElementById('dailyDate').value;
 
-            // Check immediately
-            if (checkLibraries()) {
-                initializeApp();
-                return;
-            }
+            showLoading('dailyStats');
 
-            // Wait for libraries to load
-            let attempts = 0;
-            const maxAttempts = 100; // 10 seconds
+            try {
+                const response = await fetch(`${API_BASE}/daily?date=${date}`);
+                const result = await response.json();
 
-            const checkInterval = setInterval(() => {
-                attempts++;
-
-                if (checkLibraries()) {
-                    clearInterval(checkInterval);
-                    initializeApp();
-                } else if (attempts >= maxAttempts) {
-                    clearInterval(checkInterval);
-                    document.getElementById('loadingStatus').innerHTML =
-                        '⚠️ 库加载超时<br><small>请刷新页面重试<br>如果问题持续，请检查网络连接</small>';
-                    console.error('Library loading timeout');
+                if (result.success && result.data) {
+                    const data = result.data;
+                    document.getElementById('stake1d').textContent = formatNumber(data.stake_1d) + ' LAX';
+                    document.getElementById('stake7d').textContent = formatNumber(data.stake_7d) + ' LAX';
+                    document.getElementById('stake15d').textContent = formatNumber(data.stake_15d) + ' LAX';
+                    document.getElementById('stake30d').textContent = formatNumber(data.stake_30d) + ' LAX';
+                    document.getElementById('stakeTotal').textContent = formatNumber(data.stake_total) + ' LAX';
+                } else {
+                    // 使用模拟数据演示
+                    showMockDailyData();
                 }
-            }, 100);
+            } catch (error) {
+                console.error('API error:', error);
+                showMockDailyData();
+            }
         }
 
-        // Initialize App after libraries loaded
-        async function initializeApp() {
-            console.log('App initialized!');
+        async function loadPeriodData(days) {
+            // 更新按钮状态
+            document.querySelectorAll('.period-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.includes(days.toString())) {
+                    btn.classList.add('active');
+                }
+            });
 
-            // Check if wallet exists
-            if (typeof window.ethereum !== 'undefined') {
-                try {
-                    provider = new ethers.providers.Web3Provider(window.ethereum);
-                    const accounts = await provider.listAccounts();
-                    if (accounts.length > 0) {
-                        await connectWallet();
+            showLoading('periodChart');
+
+            try {
+                const endDate = new Date().toISOString().split('T')[0];
+                const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+                const response = await fetch(`${API_BASE}/period?start=${startDate}&end=${endDate}`);
+                const result = await response.json();
+
+                if (result.success && result.data) {
+                    const data = result.data;
+                    document.getElementById('totalNewStaked').textContent = formatNumber(data.total_new_staked);
+                    document.getElementById('stillStaked').textContent = formatNumber(data.still_staked);
+                    document.getElementById('currentRedeemable').textContent = formatNumber(data.current_redeemable);
+                    document.getElementById('dataPoints').textContent = data.data_points;
+
+                    // 更新可解押列表
+                    if (data.future_redeemable) {
+                        document.getElementById('redeem1d').textContent = formatNumber(data.future_redeemable['1d']) + ' LAX';
+                        document.getElementById('redeem2d').textContent = formatNumber(data.future_redeemable['2d']) + ' LAX';
+                        document.getElementById('redeem7d').textContent = formatNumber(data.future_redeemable['7d']) + ' LAX';
+                        document.getElementById('redeem15d').textContent = formatNumber(data.future_redeemable['15d']) + ' LAX';
+                        document.getElementById('redeem30d').textContent = formatNumber(data.future_redeemable['30d']) + ' LAX';
                     }
-                } catch (e) {
-                    console.log('Wallet not connected');
+                } else {
+                    showMockPeriodData();
                 }
+            } catch (error) {
+                console.error('API error:', error);
+                showMockPeriodData();
             }
 
-            // Load initial data
-            loadDashboardData();
-            loadHistory();
+            // 加载图表数据
+            loadChartData(days);
         }
 
-        // Connect Wallet
-        async function connectWallet() {
-            if (typeof window.ethereum === 'undefined') {
-                alert('请使用 TokenPocket 或 MetaMask 钱包访问');
-                return;
-            }
+        async function loadChartData(days) {
+            try {
+                const timeframe = days <= 7 ? 'day' : days <= 30 ? 'week' : 'month';
+                const response = await fetch(`${API_BASE}/chart/${timeframe}`);
+                const result = await response.json();
 
-            if (!ethersLoaded) {
-                alert('Web3 库还未加载完成，请稍候...');
-                return;
+                if (result.success && result.data) {
+                    renderChart(result.data.labels, result.data.values);
+                } else {
+                    renderChart(generateMockLabels(days), generateMockData(days));
+                }
+            } catch (error) {
+                renderChart(generateMockLabels(days), generateMockData(days));
             }
+        }
+
+        async function loadRedeemable() {
+            const date = document.getElementById('redeemDate').value;
+            const resultDiv = document.getElementById('redeemResult');
+            resultDiv.style.display = 'none';
 
             try {
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                const accounts = await provider.send("eth_requestAccounts", []);
-                signer = provider.getSigner();
-                userAddress = await signer.getAddress();
+                const response = await fetch(`${API_BASE}/redeemable?date=${date}`);
+                const result = await response.json();
 
-                document.getElementById('connectWallet').textContent =
-                    userAddress.substring(0, 6) + '...' + userAddress.substring(38);
-                document.getElementById('walletAddress').textContent =
-                    '已连接: ' + userAddress.substring(0, 10) + '...';
-
-                document.getElementById('walletSection').style.display = 'block';
-                document.getElementById('userStakingSection').style.display = 'block';
-
-                // Enable action buttons
-                document.getElementById('claimBtn').disabled = false;
-                document.getElementById('stakeBtn').disabled = false;
-                document.getElementById('unstakeBtn').disabled = false;
-
-                // Load user data
-                loadUserData();
+                if (result.success && result.data) {
+                    const data = result.data;
+                    document.getElementById('redeemAmount').textContent = formatNumber(data.redeemable) + ' LAX';
+                    document.getElementById('redeemDays').textContent = data.days_until + ' 天';
+                    resultDiv.style.display = 'block';
+                } else {
+                    alert('无法获取到期数据，请稍后重试');
+                }
             } catch (error) {
-                console.error('Connection error:', error);
-                alert('连接钱包失败: ' + error.message);
+                console.error('API error:', error);
+                alert('无法连接到数据服务，请检查 API 是否运行');
             }
         }
 
-        // Load Dashboard Data
-        async function loadDashboardData() {
-            try {
-                // Mock data for demo
-                updateStats({
-                    totalStaked: 450000,
-                    stakersCount: 1234,
-                    apy: 365
-                });
+        function renderChart(labels, values) {
+            const ctx = document.getElementById('periodChart').getContext('2d');
 
-                // Load chart
-                initChart();
-            } catch (error) {
-                console.error('Error loading dashboard:', error);
-            }
-        }
-
-        // Load User Data
-        async function loadUserData() {
-            try {
-                // Mock data for demo
-                document.getElementById('userStaked').textContent = '1,250 LAX';
-                document.getElementById('userRewards').textContent = '45.8 LAX';
-                document.getElementById('userTotalEarned').textContent = '520 LAX';
-            } catch (error) {
-                console.error('Error loading user data:', error);
-            }
-        }
-
-        // Update Stats Display
-        function updateStats(data) {
-            document.getElementById('totalStaked').textContent =
-                data.totalStaked.toLocaleString() + ' LAX';
-            document.getElementById('stakersCount').textContent =
-                data.stakersCount.toLocaleString();
-            document.getElementById('apyValue').textContent = data.apy + '%';
-        }
-
-        // Initialize Chart
-        function initChart() {
-            if (!chartLoaded) {
-                console.warn('Chart.js not loaded yet');
-                return;
+            if (periodChart) {
+                periodChart.destroy();
             }
 
-            const ctx = document.getElementById('stakingChart').getContext('2d');
-
-            const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+            const gradient = ctx.createLinearGradient(0, 0, 0, 250);
             gradient.addColorStop(0, 'rgba(243, 156, 18, 0.5)');
             gradient.addColorStop(1, 'rgba(243, 156, 18, 0)');
 
-            stakingChart = new Chart(ctx, {
+            periodChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: getTimeLabels('day'),
+                    labels: labels,
                     datasets: [{
-                        label: '质押量',
-                        data: [420000, 425000, 430000, 435000, 440000, 445000, 450000],
+                        label: '每日质押量',
+                        data: values,
                         borderColor: '#f39c12',
                         backgroundColor: gradient,
                         fill: true,
                         tension: 0.4,
-                        pointRadius: 0
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        pointHoverBackgroundColor: '#f39c12'
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.parsed.y.toLocaleString() + ' LAX';
+                                }
+                            }
+                        }
                     },
                     scales: {
                         x: {
@@ -690,8 +542,11 @@
                             grid: { color: 'rgba(255,255,255,0.05)' },
                             ticks: {
                                 color: '#888',
-                                font: { size: 10 },
-                                callback: value => (value / 1000) + 'K'
+                                callback: value => {
+                                    if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
+                                    if (value >= 1000) return (value / 1000).toFixed(1) + 'K';
+                                    return value;
+                                }
                             }
                         }
                     }
@@ -699,98 +554,58 @@
             });
         }
 
-        // Get Time Labels
-        function getTimeLabels(timeframe) {
-            const labels = {
-                day: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
-                week: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-                month: ['第1周', '第2周', '第3周', '第4周']
-            };
-            return labels[timeframe] || labels.day;
-        }
-
-        // Set Timeframe
-        function setTimeframe(timeframe, btn) {
-            currentTimeframe = timeframe;
-
-            // Update active button
-            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            // Update chart
-            if (stakingChart) {
-                stakingChart.data.labels = getTimeLabels(timeframe);
-                stakingChart.update();
-            }
-        }
-
-        // Load History
-        async function loadHistory() {
-            const historyData = [
-                { date: '2024-02-20', type: '质押', amount: 500, status: 'staking' },
-                { date: '2024-02-18', type: '解除质押', amount: 200, status: 'unstaking' },
-                { date: '2024-02-15', type: '领取奖励', amount: 45.8, status: 'complete' },
-                { date: '2024-02-10', type: '质押', amount: 1000, status: 'staking' },
-            ];
-
-            let html = '<table class="staking-table"><thead><tr>' +
-                '<th>日期</th><th>类型</th><th>数量</th><th>状态</th></tr></thead><tbody>';
-
-            historyData.forEach(item => {
-                html += `<tr>
-                    <td>${item.date}</td>
-                    <td>${item.type}</td>
-                    <td class="amount">${item.amount} LAX</td>
-                    <td><span class="status ${item.status}">${getStatusText(item.status)}</span></td>
-                </tr>`;
+        function formatNumber(num) {
+            if (!num) return '0.00';
+            return parseFloat(num).toLocaleString('zh-CN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
             });
-
-            html += '</tbody></table>';
-            document.getElementById('historyContent').innerHTML = html;
         }
 
-        function getStatusText(status) {
-            const texts = {
-                staking: '质押中',
-                unstaking: '解除中',
-                complete: '已完成'
-            };
-            return texts[status] || status;
+        function showLoading(elementId) {
+            // 可以添加加载动画
         }
 
-        // Staking Functions
-        async function stake() {
-            if (!userAddress) {
-                alert('请先连接钱包');
-                return;
+        function generateMockLabels(days) {
+            const labels = [];
+            for (let i = days - 1; i >= 0; i--) {
+                const date = new Date();
+                date.setDate(date.getDate() - i);
+                labels.push(date.toISOString().split('T')[0].substring(5));
             }
-            // TODO: Implement staking logic
-            alert('质押功能开发中...\n\n实际部署时需要:\n1. 调用合约的 stake() 函数\n2. 用户授权代币\n3. 显示交易进度');
+            return labels;
         }
 
-        async function unstake() {
-            if (!userAddress) {
-                alert('请先连接钱包');
-                return;
+        function generateMockData(days) {
+            const data = [];
+            for (let i = 0; i < days; i++) {
+                data.push(Math.random() * 500000 + 300000);
             }
-            alert('解除质押功能开发中...');
+            return data;
         }
 
-        async function claimRewards() {
-            if (!userAddress) {
-                alert('请先连接钱包');
-                return;
-            }
-            alert('领取奖励功能开发中...');
+        function showMockDailyData() {
+            // 模拟数据（参考截图）
+            document.getElementById('stake1d').textContent = '218,699.00 LAX';
+            document.getElementById('stake7d').textContent = '0.00 LAX';
+            document.getElementById('stake15d').textContent = '1,020.00 LAX';
+            document.getElementById('stake30d').textContent = '124,096.00 LAX';
+            document.getElementById('stakeTotal').textContent = '343,815.00 LAX';
         }
 
-        // Initialize on load
-        window.addEventListener('load', init);
+        function showMockPeriodData() {
+            // 模拟数据（参考截图）
+            document.getElementById('totalNewStaked').textContent = '1,665,217.02';
+            document.getElementById('stillStaked').textContent = '1,798,296.01';
+            document.getElementById('currentRedeemable').textContent = '58,729.35';
+            document.getElementById('dataPoints').textContent = '7';
 
-        // Also check on DOMContentLoaded
-        window.addEventListener('DOMContentLoaded', () => {
-            setTimeout(checkLibraries, 100);
-        });
+            document.getElementById('redeem1d').textContent = '494,411.95 LAX';
+            document.getElementById('redeem2d').textContent = '587,153.95 LAX';
+            document.getElementById('redeem7d').textContent = '1,041,804.44 LAX';
+            document.getElementById('redeem15d').textContent = '1,219,400.48 LAX';
+            document.getElementById('redeem30d').textContent = '1,798,296.01 LAX';
+        }
     </script>
 </body>
 </html>
