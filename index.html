@@ -378,19 +378,21 @@
         const CONFIG = {
             // 质押合约地址
             STAKING_CONTRACT: '0x7f9bd73e51e66e0b2c7a87db0ca530a11eb7a7e9',
-            // USDT 代币地址 (BSC-Peg USDT)
-            USDT_CONTRACT: '0x55d398326f99059fF775485246999027B3197955',
+            // 存储槽位置（基于合约分析）
+            SLOTS: {
+                totalStaked: '0x0',
+                staked1d: '0x2',
+                staked7d: '0x3',
+                staked15d: '0x4',
+                staked30d: '0x5'
+            },
             BSC_RPCS: [
                 'https://bsc-dataseed1.binance.org/',
                 'https://bsc-dataseed2.binance.org/',
                 'https://bsc-dataseed1.defibit.io/',
                 'https://bsc-dataseed2.defibit.io/'
             ],
-            DECIMALS: 18,  // USDT 也是 18 位小数
-            BLOCKS_PER_DAY: 28800,  // BSC 约3秒一个区块
-            SECONDS_PER_BLOCK: 3,
-            MAX_BLOCKS_PER_REQUEST: 50000,
-            INITIAL_LOAD_DAYS: 7
+            DECIMALS: 18
         };
 
         // Transfer 事件签名
@@ -401,8 +403,9 @@
         let periodChart = null;
         let analyzedData = null;  // 缓存分析后的数据
         let dailyStakingData = {};  // 按日期的质押数据
+        let stakingSlots = null;  // 直接从合约存储槽读取的质押数据
 
-        // 初始化
+        // 获取质押合约状态数据
         async function init() {
             updateStatus('正在连接 BSC 网络...');
 
@@ -411,7 +414,6 @@
                 const rpcPromises = CONFIG.BSC_RPCS.map(async (rpc) => {
                     try {
                         const testProvider = new ethers.providers.JsonRpcProvider(rpc);
-                        // 添加 5 秒超时
                         const blockNumber = await Promise.race([
                             testProvider.getBlockNumber(),
                             new Promise((_, reject) =>
@@ -424,7 +426,6 @@
                     }
                 });
 
-                // 等待第一个成功的响应
                 const results = await Promise.all(rpcPromises);
                 const success = results.find(r => r !== null);
 
@@ -438,18 +439,11 @@
                 // 初始化日期选择器
                 initDateSelectors();
 
-                // 预加载数据改为后台加载，不阻塞页面
-                setTimeout(() => {
-                    loadAndAnalyzeStakingData(CONFIG.INITIAL_LOAD_DAYS).catch(err => {
-                        console.error('后台加载数据失败:', err);
-                        updateStatus('数据加载失败，请点击查询按钮重试');
-                    });
-                }, 100);
-
-                updateStatus('已连接，点击查询按钮获取数据');
+                // 直接从合约存储槽读取质押数据
+                await displayStakingData();
 
             } catch (error) {
-                updateStatus('连接失败: ' + error.message);
+                updateStatus('连接失败: '错误: ' + error.message);
             }
         }
 
@@ -752,54 +746,15 @@
 
         // 查询每日统计
         async function queryDailyStats() {
-            const date = document.getElementById('dailyDate').value;
             const btn = document.getElementById('btnQuery');
-
             btn.disabled = true;
             btn.textContent = '查询中...';
-            updateStatus('正在分析数据...');
 
             try {
-                // 确保有数据
-                if (!analyzedData || Object.keys(dailyStakingData).length === 0) {
-                    await loadAndAnalyzeStakingData(30);
-                }
+                // 直接从合约存储槽读取最新数据
+                await displayStakingData();
 
-                // 获取目标日期的数据
-                const targetData = dailyStakingData[date];
-
-                if (targetData) {
-                    // 每日统计显示当天新增质押金额
-                    document.getElementById('stake1d').textContent = formatLaxAmount(targetData.newStaked);
-                    document.getElementById('stake7d').textContent = formatLaxAmount(targetData.newStaked);
-                    document.getElementById('stake15d').textContent = formatLaxAmount(targetData.newStaked);
-                    document.getElementById('stake30d').textContent = formatLaxAmount(targetData.newStaked);
-                    document.getElementById('stakeTotal').textContent = formatLaxAmount(targetData.newStaked);
-
-                    updateStatus(`${date} 查询完成 - 新增质押 ${formatLaxAmount(targetData.newStaked)} USDT`);
-                } else {
-                    // 如果当天没有数据，尝试扩大查询范围
-                    updateStatus(`${date} 无数据，正在扩大查询范围...`);
-                    await loadAndAnalyzeStakingData(90);
-
-                    const retryData = dailyStakingData[date];
-                    if (retryData) {
-                        document.getElementById('stake1d').textContent = formatLaxAmount(retryData.stake1d);
-                        document.getElementById('stake7d').textContent = formatLaxAmount(retryData.stake7d);
-                        document.getElementById('stake15d').textContent = formatLaxAmount(retryData.stake15d);
-                        document.getElementById('stake30d').textContent = formatLaxAmount(retryData.stake30d);
-                        document.getElementById('stakeTotal').textContent = formatLaxAmount(retryData.newStaked);
-                        updateStatus(`${date} 查询完成 - ${retryData.transactionCount} 笔交易`);
-                    } else {
-                        document.getElementById('stake1d').textContent = '0.00';
-                        document.getElementById('stake7d').textContent = '0.00';
-                        document.getElementById('stake15d').textContent = '0.00';
-                        document.getElementById('stake30d').textContent = '0.00';
-                        document.getElementById('stakeTotal').textContent = '0.00';
-                        updateStatus(`${date} 无质押数据`);
-                    }
-                }
-
+                updateStatus('数据已更新 - ' + new Date().toLocaleTimeString('zh-CN');
             } catch (error) {
                 updateStatus('查询失败: ' + error.message);
             }
