@@ -4,11 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>LAX Token Staking Dashboard</title>
-    <!-- 多个CDN备用 -->
-    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"
-            onerror="this.onerror=null; this.src='https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js'"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
-            onerror="this.onerror=null; this.src='https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js'"></script>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -319,25 +316,6 @@
         .user-staking-value {
             font-weight: 600;
         }
-
-        .error-banner {
-            background: rgba(231, 76, 60, 0.2);
-            border: 1px solid rgba(231, 76, 60, 0.5);
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 15px;
-            text-align: center;
-        }
-
-        .loading-status {
-            background: rgba(243, 156, 18, 0.1);
-            border: 1px solid rgba(243, 156, 18, 0.3);
-            border-radius: 10px;
-            padding: 10px;
-            margin-bottom: 15px;
-            text-align: center;
-            font-size: 12px;
-        }
     </style>
 </head>
 <body>
@@ -350,14 +328,7 @@
         </div>
     </div>
 
-    <!-- Loading Status -->
     <div class="container">
-        <div id="loadingStatus" class="loading-status">
-            正在加载 Web3 库...
-        </div>
-    </div>
-
-    <div class="container" id="mainContent" style="display: none;">
         <!-- Wallet Info -->
         <div id="walletSection" style="display: none;">
             <div class="wallet-info" id="walletAddress"></div>
@@ -471,8 +442,6 @@
         let userAddress = null;
         let currentTimeframe = 'day';
         let stakingChart = null;
-        let ethersLoaded = false;
-        let chartLoaded = false;
 
         // ABI for staking functions
         const STAKING_ABI = [
@@ -485,61 +454,13 @@
             "function claimRewards()"
         ];
 
-        // Check libraries are loaded
-        function checkLibraries() {
-            const loadingStatus = document.getElementById('loadingStatus');
-
-            // Check ethers
-            if (typeof ethers !== 'undefined') {
-                ethersLoaded = true;
-                console.log('✓ Ethers.js loaded');
-            } else {
-                loadingStatus.innerHTML = '⚠️ 正在加载 ethers.js...';
-                return false;
-            }
-
-            // Check Chart
-            if (typeof Chart !== 'undefined') {
-                chartLoaded = true;
-                console.log('✓ Chart.js loaded');
-            } else {
-                loadingStatus.innerHTML = '⚠️ 正在加载 Chart.js...';
-                return false;
-            }
-
-            // All loaded
-            loadingStatus.style.display = 'none';
-            document.getElementById('mainContent').style.display = 'block';
-            return true;
-        }
-
         // Initialize
         async function init() {
-            // Wait for libraries to load
-            let attempts = 0;
-            const maxAttempts = 50; // 5 seconds
-
-            const checkInterval = setInterval(() => {
-                attempts++;
-
-                if (checkLibraries()) {
-                    clearInterval(checkInterval);
-                    initializeApp();
-                } else if (attempts >= maxAttempts) {
-                    clearInterval(checkInterval);
-                    document.getElementById('loadingStatus').innerHTML =
-                        '❌ 库加载失败，请刷新页面重试<br><small>如果持续失败，请检查网络连接</small>';
-                }
-            }, 100);
-        }
-
-        // Initialize App after libraries loaded
-        async function initializeApp() {
             // Check if wallet exists
             if (typeof window.ethereum !== 'undefined') {
+                provider = new ethers.providers.Web3Provider(window.ethereum);
                 try {
-                    provider = new ethers.providers.Web3Provider(window.ethereum);
-                    const accounts = await provider.listAccounts();
+                    const accounts = await provider.send("eth_requestAccounts", []);
                     if (accounts.length > 0) {
                         await connectWallet();
                     }
@@ -550,18 +471,12 @@
 
             // Load initial data
             loadDashboardData();
-            loadHistory();
         }
 
         // Connect Wallet
         async function connectWallet() {
             if (typeof window.ethereum === 'undefined') {
                 alert('请使用 TokenPocket 或 MetaMask 钱包访问');
-                return;
-            }
-
-            if (!ethersLoaded) {
-                alert('Web3 库还未加载完成，请稍候...');
                 return;
             }
 
@@ -595,6 +510,14 @@
         // Load Dashboard Data
         async function loadDashboardData() {
             try {
+                // Connect to BSC
+                const rpcProvider = new ethers.providers.JsonRpcProvider(CONFIG.BSC_RPC);
+                const contract = new ethers.Contract(CONFIG.STAKING_CONTRACT, STAKING_ABI, rpcProvider);
+
+                // Get total staked (using balance of contract as proxy)
+                const balance = await rpcProvider.getBalance(CONFIG.STAKING_CONTRACT);
+                // This is a placeholder - real implementation would call contract functions
+
                 // Mock data for demo
                 updateStats({
                     totalStaked: 450000,
@@ -632,11 +555,6 @@
 
         // Initialize Chart
         function initChart() {
-            if (!chartLoaded) {
-                console.warn('Chart.js not loaded yet');
-                return;
-            }
-
             const ctx = document.getElementById('stakingChart').getContext('2d');
 
             const gradient = ctx.createLinearGradient(0, 0, 0, 200);
@@ -768,11 +686,6 @@
 
         // Initialize on load
         window.addEventListener('load', init);
-
-        // Also check libraries every 100ms
-        window.addEventListener('DOMContentLoaded', () => {
-            setTimeout(checkLibraries, 100);
-        });
     </script>
 </body>
 </html>
