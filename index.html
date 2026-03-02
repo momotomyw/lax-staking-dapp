@@ -384,8 +384,10 @@
                 'https://bsc-dataseed2.defibit.io/'
             ],
             DECIMALS: 18,
-            BLOCKS_PER_DAY: 28800,  // BSC 约3秒一个区块，修正值
-            SECONDS_PER_BLOCK: 3
+            BLOCKS_PER_DAY: 28800,  // BSC 约3秒一个区块
+            SECONDS_PER_BLOCK: 3,
+            MAX_BLOCKS_PER_REQUEST: 50000,  // 每次请求最大区块数（避免超时）
+            INITIAL_LOAD_DAYS: 7  // 初始加载天数（减少加载时间）
         };
 
         // Transfer 事件签名
@@ -421,8 +423,8 @@
                 // 初始化日期选择器
                 initDateSelectors();
 
-                // 预加载最近30天数据
-                await loadAndAnalyzeStakingData(30);
+                // 预加载最近7天数据（避免初始加载时间过长）
+                await loadAndAnalyzeStakingData(CONFIG.INITIAL_LOAD_DAYS);
 
             } catch (error) {
                 updateStatus('连接失败: ' + error.message);
@@ -445,7 +447,7 @@
         }
 
         // 加载并分析质押数据
-        async function loadAndAnalyzeStakingData(days = 30) {
+        async function loadAndAnalyzeStakingData(days = 7) {
             updateStatus(`正在查询最近 ${days} 天的链上数据...`);
 
             try {
@@ -453,11 +455,11 @@
                 const currentBlockData = await provider.getBlock(currentBlock);
                 const currentTimestamp = currentBlockData.timestamp;
 
-                // 计算起始区块
-                const blocksToFetch = days * CONFIG.BLOCKS_PER_DAY;
+                // 计算起始区块（限制范围避免超时）
+                const blocksToFetch = Math.min(days * CONFIG.BLOCKS_PER_DAY, CONFIG.MAX_BLOCKS_PER_REQUEST * 20);
                 const startBlock = Math.max(0, currentBlock - blocksToFetch);
 
-                console.log(`获取区块范围: ${startBlock} -> ${currentBlock}`);
+                console.log(`获取区块范围: ${startBlock} -> ${currentBlock} (${blocksToFetch} 区块)`);
 
                 // 获取 Transfer 事件日志
                 const logs = await getTransferLogs(startBlock, currentBlock);
@@ -496,24 +498,28 @@
             }
         }
 
-        // 获取 Transfer 事件日志
+        // 获取 Transfer 事件日志（带超时和重试）
         async function getTransferLogs(fromBlock, toBlock) {
             const logs = [];
-
-            // 由于 RPC 限制，分批获取
-            const BATCH_SIZE = 5000;  // 每批5000个区块
+            const BATCH_SIZE = CONFIG.MAX_BLOCKS_PER_REQUEST;  // 使用配置的批量大小
             let currentBlock = fromBlock;
 
             while (currentBlock <= toBlock) {
                 const endBlock = Math.min(currentBlock + BATCH_SIZE, toBlock);
 
                 try {
-                    const batchLogs = await provider.getLogs({
-                        address: CONFIG.CONTRACT_ADDRESS,
-                        topics: [TRANSFER_TOPIC],
-                        fromBlock: currentBlock,
-                        toBlock: endBlock
-                    });
+                    // 添加超时控制
+                    const batchLogs = await Promise.race([
+                        provider.getLogs({
+                            address: CONFIG.CONTRACT_ADDRESS,
+                            topics: [TRANSFER_TOPIC],
+                            fromBlock: currentBlock,
+                            toBlock: endBlock
+                        }),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error('请求超时')), 30000)
+                        )
+                    ]);
 
                     for (const log of batchLogs) {
                         const from = '0x' + log.topics[1].slice(26).toLowerCase();
@@ -533,10 +539,43 @@
                         }
                     }
 
-                    console.log(`区块 ${currentBlock}-${endBlock}: ${batchLogs.length} 条事件`);
+                    console.log(`区块 ${currentBlock}-${endBlock}: ${batchLogs.length} 条事件，其中 ${logs.length} 条质押相关`);
 
                 } catch (error) {
-                    console.error(`获取区块 ${currentBlock}-${endBlock} 失败:`, error);
+                    console.error(`获取区块 ${currentBlock}-${endBlock} 失败:`, error.message);
+                    // 如果是超时，尝试用更小的批次
+                    if (error.message === '请求超时' && BATCH_SIZE > 5000) {
+                        console.log('超时，尝试减小批次大小重新获取...');
+                        const smallerBatch = Math.floor(BATCH_SIZE / 5);
+                        const retryEnd = Math.min(currentBlock + smallerBatch, toBlock);
+                        try {
+                            const batchLogs = await provider.getLogs({
+                                address: CONFIG.CONTRACT_ADDRESS,
+                                topics: [TRANSFER_TOPIC],
+                                fromBlock: currentBlock,
+                                toBlock: retryEnd
+                            });
+                            // 处理日志...
+                            for (const log of batchLogs) {
+                                const from = '0x' + log.topics[1].slice(26).toLowerCase();
+                                const to = '0x' + log.topics[2].slice(26).toLowerCase();
+                                const value = BigInt(log.data);
+                                if (from === CONFIG.CONTRACT_ADDRESS.toLowerCase() ||
+                                    to === CONFIG.CONTRACT_ADDRESS.toLowerCase()) {
+                                    logs.push({
+                                        blockNumber: parseInt(log.blockNumber, 16),
+                                        transactionHash: log.transactionHash,
+                                        from: from,
+                                        to: to,
+                                        value: value
+                                    });
+                                }
+                            }
+                            console.log(`重试成功: ${currentBlock}-${retryEnd}`);
+                        } catch (retryError) {
+                            console.error('重试也失败:', retryError.message);
+                        }
+                    }
                 }
 
                 currentBlock = endBlock + 1;
