@@ -627,11 +627,15 @@
             return logs;
         }
 
-        // 按日期分析转账数据
+        // 按日期分析转账数据，并跟踪每笔质押的时间
         function analyzeTransfersByDate(transfers) {
             const dailyData = {};
             let cumulativeStaked = BigInt(0);
             const contractAddr = CONFIG.STAKING_CONTRACT.toLowerCase();
+
+            // 存储所有质押记录，用于计算可解押金额
+            // 每条记录: { amount, timestamp, isUnstaked }
+            const stakeRecords = [];
 
             // 按时间排序
             const sorted = [...transfers].sort((a, b) => a.timestamp - b.timestamp);
@@ -644,11 +648,7 @@
                         newStaked: BigInt(0),
                         unstaked: BigInt(0),
                         totalStaked: BigInt(0),
-                        transactionCount: 0,
-                        stake1d: BigInt(0),
-                        stake7d: BigInt(0),
-                        stake15d: BigInt(0),
-                        stake30d: BigInt(0)
+                        transactionCount: 0
                     };
                 }
 
@@ -656,13 +656,33 @@
                 const isStake = tx.to === contractAddr;  // 转入合约 = 质押
 
                 if (isStake) {
+                    // 质押：记录质押事件
+                    stakeRecords.push({
+                        amount: value,
+                        timestamp: tx.timestamp,
+                        blockNumber: tx.blockNumber,
+                        isUnstaked: false
+                    });
+
                     dailyData[date].newStaked += value;
-                    dailyData[date].stake1d += value;
-                    dailyData[date].stake7d += value;
-                    dailyData[date].stake15d += value;
-                    dailyData[date].stake30d += value;
                     cumulativeStaked += value;
                 } else {
+                    // 解质押：标记相应的质押记录为已解押（FIFO先进先出）
+                    let remainingToUnstake = value;
+                    for (const record of stakeRecords) {
+                        if (remainingToUnstake <= BigInt(0)) break;
+                        if (!record.isUnstaked) {
+                            if (record.amount >= remainingToUnstake) {
+                                record.amount -= remainingToUnstake;
+                                record.isUnstaked = (record.amount === BigInt(0));
+                                remainingToUnstake = BigInt(0);
+                            } else {
+                                remainingToUnstake -= record.amount;
+                                record.isUnstaked = true;
+                            }
+                        }
+                    }
+
                     dailyData[date].unstaked += value;
                     cumulativeStaked -= value;
                 }
@@ -671,9 +691,16 @@
                 dailyData[date].transactionCount++;
             }
 
+            // 计算当前仍在质押的总金额
+            const currentStaked = stakeRecords
+                .filter(r => !r.isUnstaked)
+                .reduce((sum, r) => sum + r.amount, BigInt(0));
+
             return {
                 dailyData: dailyData,
-                totalCumulativeStaked: cumulativeStaked
+                totalCumulativeStaked: cumulativeStaked,
+                currentStaked: currentStaked,
+                stakeRecords: stakeRecords  // 用于计算可解押金额
             };
         }
 
@@ -681,6 +708,46 @@
         function formatLaxAmount(bigIntValue) {
             const num = Number(bigIntValue) / Math.pow(10, CONFIG.DECIMALS);
             return num.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+
+        // 计算可解押金额（基于质押时间）
+        // 假设规则：质押满 N 天后可解押，按批次解锁
+        function calculateRedeemableAmounts(stakeRecords, currentTimestamp) {
+            const SECONDS_PER_DAY = 86400;
+
+            // 计算每个时间段的质押金额
+            const redeemable = {
+                now: BigInt(0),        // 当前可解押（满30天）
+                future1d: BigInt(0),   // 1天后可解押
+                future2d: BigInt(0),   // 2天后可解押
+                future7d: BigInt(0),   // 7天后可解押
+                future15d: BigInt(0),  // 15天后可解押
+                future30d: BigInt(0)   // 30天后可解押
+            };
+
+            for (const record of stakeRecords) {
+                if (record.isUnstaked) continue;
+
+                const stakeTimestamp = record.timestamp;
+                const daysStaked = Math.floor((currentTimestamp - stakeTimestamp) / SECONDS_PER_DAY);
+
+                // 根据质押天数分类
+                if (daysStaked >= 30) {
+                    redeemable.now += record.amount;
+                } else if (daysStaked >= 29) {
+                    redeemable.future1d += record.amount;
+                } else if (daysStaked >= 28) {
+                    redeemable.future2d += record.amount;
+                } else if (daysStaked >= 23) {
+                    redeemable.future7d += record.amount;
+                } else if (daysStaked >= 15) {
+                    redeemable.future15d += record.amount;
+                } else {
+                    redeemable.future30d += record.amount;
+                }
+            }
+
+            return redeemable;
         }
 
         // 查询每日统计
@@ -702,13 +769,14 @@
                 const targetData = dailyStakingData[date];
 
                 if (targetData) {
-                    document.getElementById('stake1d').textContent = formatLaxAmount(targetData.stake1d);
-                    document.getElementById('stake7d').textContent = formatLaxAmount(targetData.stake7d);
-                    document.getElementById('stake15d').textContent = formatLaxAmount(targetData.stake15d);
-                    document.getElementById('stake30d').textContent = formatLaxAmount(targetData.stake30d);
+                    // 每日统计显示当天新增质押金额
+                    document.getElementById('stake1d').textContent = formatLaxAmount(targetData.newStaked);
+                    document.getElementById('stake7d').textContent = formatLaxAmount(targetData.newStaked);
+                    document.getElementById('stake15d').textContent = formatLaxAmount(targetData.newStaked);
+                    document.getElementById('stake30d').textContent = formatLaxAmount(targetData.newStaked);
                     document.getElementById('stakeTotal').textContent = formatLaxAmount(targetData.newStaked);
 
-                    updateStatus(`${date} 查询完成 - ${targetData.transactionCount} 笔交易`);
+                    updateStatus(`${date} 查询完成 - 新增质押 ${formatLaxAmount(targetData.newStaked)} USDT`);
                 } else {
                     // 如果当天没有数据，尝试扩大查询范围
                     updateStatus(`${date} 无数据，正在扩大查询范围...`);
@@ -782,22 +850,27 @@
                 // 渲染图表
                 renderChart(labels, values);
 
+                // 获取当前时间戳用于计算可解押金额
+                const currentBlockData = await provider.getBlock(await provider.getBlockNumber());
+                const currentTimestamp = currentBlockData.timestamp;
+
                 // 更新统计数据（使用真实链上数据）
-                const currentTotal = analyzedData ? analyzedData.totalCumulativeStaked : BigInt(0);
+                const currentTotal = analyzedData ? analyzedData.currentStaked : BigInt(0);
+
+                // 计算可解押金额
+                const redeemable = calculateRedeemableAmounts(analyzedData.stakeRecords || [], currentTimestamp);
 
                 document.getElementById('totalNewStaked').textContent = formatLaxAmount(totalNewStaked);
-                document.getElementById('stillStaked').textContent = formatLaxAmount(maxTotalStaked);
-                document.getElementById('currentRedeemable').textContent = formatLaxAmount(maxTotalStaked / BigInt(20));  // 5% 可立即解押
+                document.getElementById('stillStaked').textContent = formatLaxAmount(currentTotal);  // 当前仍在质押
+                document.getElementById('currentRedeemable').textContent = formatLaxAmount(redeemable.now);  // 当前可解押（满30天）
                 document.getElementById('dataPoints').textContent = Object.keys(dailyStakingData).length.toString();
 
-                // 更新可解押金额（基于当前仍在质押的金额按时间分配）
-                const stillStakedNum = Number(maxTotalStaked) / Math.pow(10, CONFIG.DECIMALS);
-
-                document.getElementById('redeem1d').textContent = (stillStakedNum * 0.15).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                document.getElementById('redeem2d').textContent = (stillStakedNum * 0.25).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                document.getElementById('redeem7d').textContent = (stillStakedNum * 0.45).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                document.getElementById('redeem15d').textContent = (stillStakedNum * 0.70).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                document.getElementById('redeem30d').textContent = (stillStakedNum).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                // 更新未来可解押金额（基于真实质押时间计算）
+                document.getElementById('redeem1d').textContent = formatLaxAmount(redeemable.future1d);
+                document.getElementById('redeem2d').textContent = formatLaxAmount(redeemable.future2d);
+                document.getElementById('redeem7d').textContent = formatLaxAmount(redeemable.future7d);
+                document.getElementById('redeem15d').textContent = formatLaxAmount(redeemable.future15d);
+                document.getElementById('redeem30d').textContent = formatLaxAmount(redeemable.future30d);
 
                 updateStatus(`查询完成 - 最近 ${days} 天数据`);
 
@@ -817,7 +890,7 @@
 
             try {
                 // 确保有数据
-                if (!analyzedData || Object.keys(dailyStakingData).length === 0) {
+                if (!analyzedData || !analyzedData.stakeRecords) {
                     await loadAndAnalyzeStakingData(30);
                 }
 
@@ -830,22 +903,28 @@
                     return;
                 }
 
-                // 基于当前仍在质押的金额估算
-                const currentTotal = analyzedData ? analyzedData.totalCumulativeStaked : BigInt(0);
-                const currentTotalNum = Number(currentTotal) / Math.pow(10, CONFIG.DECIMALS);
+                // 获取当前时间戳
+                const currentBlockData = await provider.getBlock(await provider.getBlockNumber());
+                const currentTimestamp = currentBlockData.timestamp;
 
-                // 根据天数计算可解锁比例
-                let redeemRatio = 0;
-                if (daysUntil >= 30) redeemRatio = 1.0;
-                else if (daysUntil >= 15) redeemRatio = 0.7;
-                else if (daysUntil >= 7) redeemRatio = 0.45;
-                else if (daysUntil >= 2) redeemRatio = 0.25;
-                else if (daysUntil >= 1) redeemRatio = 0.15;
-                else redeemRatio = 0.05;
+                // 计算目标日期的时间戳
+                const targetTimestamp = currentTimestamp + (daysUntil * 86400);
 
-                const redeemAmount = currentTotalNum * redeemRatio;
+                // 计算在目标日期时可解押的金额
+                let totalRedeemable = BigInt(0);
+                for (const record of analyzedData.stakeRecords) {
+                    if (record.isUnstaked) continue;
 
-                document.getElementById('redeemAmount').textContent = redeemAmount.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    const stakeTimestamp = record.timestamp;
+                    const daysAtTarget = Math.floor((targetTimestamp - stakeTimestamp) / 86400);
+
+                    // 如果在目标日期已满30天，则可解押
+                    if (daysAtTarget >= 30) {
+                        totalRedeemable += record.amount;
+                    }
+                }
+
+                document.getElementById('redeemAmount').textContent = formatLaxAmount(totalRedeemable);
                 document.getElementById('redeemDays').textContent = daysUntil + ' 天';
                 resultDiv.style.display = 'block';
 
