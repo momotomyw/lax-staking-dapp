@@ -404,27 +404,46 @@
             updateStatus('正在连接 BSC 网络...');
 
             try {
-                // 尝试多个 RPC
-                for (const rpc of CONFIG.BSC_RPCS) {
+                // 并行测试所有 RPC，使用第一个响应的
+                const rpcPromises = CONFIG.BSC_RPCS.map(async (rpc) => {
                     try {
-                        provider = new ethers.providers.JsonRpcProvider(rpc);
-                        const blockNumber = await provider.getBlockNumber();
-                        updateStatus(`已连接 BSC，当前区块: ${blockNumber.toLocaleString()}`);
-                        break;
+                        const testProvider = new ethers.providers.JsonRpcProvider(rpc);
+                        // 添加 5 秒超时
+                        const blockNumber = await Promise.race([
+                            testProvider.getBlockNumber(),
+                            new Promise((_, reject) =>
+                                setTimeout(() => reject(new Error('timeout')), 5000)
+                            )
+                        ]);
+                        return { provider: testProvider, blockNumber, rpc };
                     } catch (e) {
-                        continue;
+                        return null;
                     }
-                }
+                });
 
-                if (!provider) {
+                // 等待第一个成功的响应
+                const results = await Promise.all(rpcPromises);
+                const success = results.find(r => r !== null);
+
+                if (!success) {
                     throw new Error('所有 RPC 节点均无法连接');
                 }
+
+                provider = success.provider;
+                updateStatus(`已连接 BSC，当前区块: ${success.blockNumber.toLocaleString()}`);
 
                 // 初始化日期选择器
                 initDateSelectors();
 
-                // 预加载最近7天数据（避免初始加载时间过长）
-                await loadAndAnalyzeStakingData(CONFIG.INITIAL_LOAD_DAYS);
+                // 预加载数据改为后台加载，不阻塞页面
+                setTimeout(() => {
+                    loadAndAnalyzeStakingData(CONFIG.INITIAL_LOAD_DAYS).catch(err => {
+                        console.error('后台加载数据失败:', err);
+                        updateStatus('数据加载失败，请点击查询按钮重试');
+                    });
+                }, 100);
+
+                updateStatus('已连接，点击查询按钮获取数据');
 
             } catch (error) {
                 updateStatus('连接失败: ' + error.message);
@@ -447,8 +466,12 @@
         }
 
         // 加载并分析质押数据
-        async function loadAndAnalyzeStakingData(days = 7) {
-            updateStatus(`正在查询最近 ${days} 天的链上数据...`);
+        async function loadAndAnalyzeStakingData(days = 7, isBackground = false) {
+            if (!isBackground) {
+                updateStatus(`正在查询最近 ${days} 天的链上数据...`);
+            } else {
+                console.log(`后台加载最近 ${days} 天数据...`);
+            }
 
             try {
                 const currentBlock = await provider.getBlockNumber();
@@ -460,6 +483,13 @@
                 const startBlock = Math.max(0, currentBlock - blocksToFetch);
 
                 console.log(`获取区块范围: ${startBlock} -> ${currentBlock} (${blocksToFetch} 区块)`);
+
+                // 检查区块范围是否过大
+                if (blocksToFetch > 500000) {
+                    console.warn('区块范围过大，限制到500000区块');
+                    const maxBlocks = 500000;
+                    startBlock = Math.max(0, currentBlock - maxBlocks);
+                }
 
                 // 获取 Transfer 事件日志
                 const logs = await getTransferLogs(startBlock, currentBlock);
@@ -487,13 +517,19 @@
                 analyzedData = analyzeTransfersByDate(transfersWithTimestamp);
                 dailyStakingData = analyzedData.dailyData;
 
-                updateStatus(`数据加载完成 - 覆盖 ${Object.keys(dailyStakingData).length} 天，共 ${logs.length} 笔交易`);
+                const statusMsg = `数据加载完成 - 覆盖 ${Object.keys(dailyStakingData).length} 天，共 ${logs.length} 笔交易`;
+                console.log(statusMsg);
+                if (!isBackground) {
+                    updateStatus(statusMsg);
+                }
 
                 return analyzedData;
 
             } catch (error) {
                 console.error('加载数据失败:', error);
-                updateStatus('数据加载失败: ' + error.message);
+                if (!isBackground) {
+                    updateStatus('数据加载失败: ' + error.message);
+                }
                 return null;
             }
         }
