@@ -4,11 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>LAX Token Staking Dashboard</title>
-    <!-- 多个CDN备用 -->
-    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"
-            onerror="this.onerror=null; this.src='https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js'"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
-            onerror="this.onerror=null; this.src='https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js'"></script>
+    <!-- 同时加载多个CDN，哪个先成功用哪个 -->
+    <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -488,36 +486,53 @@
         // Check libraries are loaded
         function checkLibraries() {
             const loadingStatus = document.getElementById('loadingStatus');
+            let loadedCount = 0;
+            let totalCount = 2;
 
             // Check ethers
             if (typeof ethers !== 'undefined') {
                 ethersLoaded = true;
-                console.log('✓ Ethers.js loaded');
+                loadedCount++;
+                console.log('Ethers.js loaded');
             } else {
-                loadingStatus.innerHTML = '⚠️ 正在加载 ethers.js...';
-                return false;
+                console.warn('Ethers.js not loaded yet');
             }
 
             // Check Chart
             if (typeof Chart !== 'undefined') {
                 chartLoaded = true;
-                console.log('✓ Chart.js loaded');
+                loadedCount++;
+                console.log('Chart.js loaded');
             } else {
-                loadingStatus.innerHTML = '⚠️ 正在加载 Chart.js...';
+                console.warn('Chart.js not loaded yet');
+            }
+
+            // Update status
+            if (loadedCount < totalCount) {
+                loadingStatus.innerHTML = `正在加载库 (${loadedCount}/${totalCount})...`;
                 return false;
             }
 
             // All loaded
             loadingStatus.style.display = 'none';
             document.getElementById('mainContent').style.display = 'block';
+            console.log('All libraries loaded!');
             return true;
         }
 
         // Initialize
         async function init() {
+            console.log('Initializing app...');
+
+            // Check immediately
+            if (checkLibraries()) {
+                initializeApp();
+                return;
+            }
+
             // Wait for libraries to load
             let attempts = 0;
-            const maxAttempts = 50; // 5 seconds
+            const maxAttempts = 100; // 10 seconds
 
             const checkInterval = setInterval(() => {
                 attempts++;
@@ -528,13 +543,16 @@
                 } else if (attempts >= maxAttempts) {
                     clearInterval(checkInterval);
                     document.getElementById('loadingStatus').innerHTML =
-                        '❌ 库加载失败，请刷新页面重试<br><small>如果持续失败，请检查网络连接</small>';
+                        '⚠️ 库加载超时<br><small>请刷新页面重试<br>如果问题持续，请检查网络连接</small>';
+                    console.error('Library loading timeout');
                 }
             }, 100);
         }
 
         // Initialize App after libraries loaded
         async function initializeApp() {
+            console.log('App initialized!');
+
             // Check if wallet exists
             if (typeof window.ethereum !== 'undefined') {
                 try {
@@ -769,7 +787,7 @@
         // Initialize on load
         window.addEventListener('load', init);
 
-        // Also check libraries every 100ms
+        // Also check on DOMContentLoaded
         window.addEventListener('DOMContentLoaded', () => {
             setTimeout(checkLibraries, 100);
         });
