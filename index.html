@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LAX 质押数据统计</title>
+    <title>LAX USDT 质押数据统计</title>
     <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
@@ -229,7 +229,7 @@
 </head>
 <body>
     <div class="header">
-        <div class="logo">LAX 质押统计</div>
+        <div class="logo">LAX USDT 质押统计</div>
     </div>
 
     <div class="nav-tabs">
@@ -273,11 +273,11 @@
 
                 <div style="margin-top: 20px;">
                     <div class="stat-item" style="background: rgba(243, 156, 18, 0.1);">
-                        <div class="stat-label">当天总质押金额 (LAX)</div>
+                        <div class="stat-label">当天总质押金额 (USDT)</div>
                         <div class="stat-value highlight" id="stakeTotal">0.00</div>
                     </div>
                 </div>
-                <div class="info-text">数据来源: BSC 链上 Transfer 事件分析（转入合约=质押，转出=解质押）</div>
+                <div class="info-text">数据来源: BSC 链上 USDT Transfer 事件分析（转入质押合约=质押 USDT，转出=解质押）</div>
             </div>
         </div>
 
@@ -321,7 +321,7 @@
             </div>
 
             <div class="card">
-                <div class="card-title">未来可解押金额 (LAX)</div>
+                <div class="card-title">未来可解押金额 (USDT)</div>
                 <div id="redeemableList">
                     <div class="data-row">
                         <span class="data-label">未来1天后可解押</span>
@@ -344,7 +344,7 @@
                         <span class="data-value" id="redeem30d">0.00</span>
                     </div>
                 </div>
-                <div class="info-text">注: 可解押金额基于当前仍在质押的总金额按时间估算</div>
+                <div class="info-text">注: 可解押金额基于当前仍在质押的 USDT 总金额按时间估算</div>
             </div>
         </div>
 
@@ -360,7 +360,7 @@
 
                 <div id="redeemResult" style="display: none;">
                     <div class="stat-item" style="background: rgba(46, 204, 113, 0.1); margin-bottom: 15px;">
-                        <div class="stat-label">预计到期金额 (LAX)</div>
+                        <div class="stat-label">预计到期金额 (USDT)</div>
                         <div class="stat-value highlight" id="redeemAmount">0.00</div>
                     </div>
                     <div class="stat-item">
@@ -376,18 +376,21 @@
     <script>
         // 配置
         const CONFIG = {
-            CONTRACT_ADDRESS: '0x7f9bd73e51e66e0b2c7a87db0ca530a11eb7a7e9',
+            // 质押合约地址
+            STAKING_CONTRACT: '0x7f9bd73e51e66e0b2c7a87db0ca530a11eb7a7e9',
+            // USDT 代币地址 (BSC-Peg USDT)
+            USDT_CONTRACT: '0x55d398326f99059fF775485246999027B3197955',
             BSC_RPCS: [
                 'https://bsc-dataseed1.binance.org/',
                 'https://bsc-dataseed2.binance.org/',
                 'https://bsc-dataseed1.defibit.io/',
                 'https://bsc-dataseed2.defibit.io/'
             ],
-            DECIMALS: 18,
+            DECIMALS: 18,  // USDT 也是 18 位小数
             BLOCKS_PER_DAY: 28800,  // BSC 约3秒一个区块
             SECONDS_PER_BLOCK: 3,
-            MAX_BLOCKS_PER_REQUEST: 50000,  // 每次请求最大区块数（避免超时）
-            INITIAL_LOAD_DAYS: 7  // 初始加载天数（减少加载时间）
+            MAX_BLOCKS_PER_REQUEST: 50000,
+            INITIAL_LOAD_DAYS: 7
         };
 
         // Transfer 事件签名
@@ -535,20 +538,23 @@
         }
 
         // 获取 Transfer 事件日志（带超时和重试）
+        // 查询 USDT 代币的 Transfer 事件，过滤与质押合约相关的交易
         async function getTransferLogs(fromBlock, toBlock) {
             const logs = [];
-            const BATCH_SIZE = CONFIG.MAX_BLOCKS_PER_REQUEST;  // 使用配置的批量大小
+            const BATCH_SIZE = CONFIG.MAX_BLOCKS_PER_REQUEST;
             let currentBlock = fromBlock;
+            const stakingContract = CONFIG.STAKING_CONTRACT.toLowerCase();
 
             while (currentBlock <= toBlock) {
                 const endBlock = Math.min(currentBlock + BATCH_SIZE, toBlock);
 
                 try {
                     // 添加超时控制
+                    // 查询 USDT 代币的 Transfer 事件
                     const batchLogs = await Promise.race([
                         provider.getLogs({
-                            address: CONFIG.CONTRACT_ADDRESS,
-                            topics: [TRANSFER_TOPIC],
+                            address: CONFIG.USDT_CONTRACT,  // 查询 USDT 代币
+                            topics: [TRANSFER_TOPIC],         // Transfer 事件
                             fromBlock: currentBlock,
                             toBlock: endBlock
                         }),
@@ -562,9 +568,10 @@
                         const to = '0x' + log.topics[2].slice(26).toLowerCase();
                         const value = BigInt(log.data);
 
-                        // 只统计与合约相关的转账（质押/解质押）
-                        if (from === CONFIG.CONTRACT_ADDRESS.toLowerCase() ||
-                            to === CONFIG.CONTRACT_ADDRESS.toLowerCase()) {
+                        // 只统计与质押合约相关的 USDT 转账
+                        // 转入质押合约 = 质押 USDT
+                        // 从质押合约转出 = 解质押 USDT
+                        if (from === stakingContract || to === stakingContract) {
                             logs.push({
                                 blockNumber: parseInt(log.blockNumber, 16),
                                 transactionHash: log.transactionHash,
@@ -575,7 +582,7 @@
                         }
                     }
 
-                    console.log(`区块 ${currentBlock}-${endBlock}: ${batchLogs.length} 条事件，其中 ${logs.length} 条质押相关`);
+                    console.log(`区块 ${currentBlock}-${endBlock}: ${batchLogs.length} 条 USDT 转账，其中 ${logs.length} 条质押相关`);
 
                 } catch (error) {
                     console.error(`获取区块 ${currentBlock}-${endBlock} 失败:`, error.message);
@@ -624,7 +631,7 @@
         function analyzeTransfersByDate(transfers) {
             const dailyData = {};
             let cumulativeStaked = BigInt(0);
-            const contractAddr = CONFIG.CONTRACT_ADDRESS.toLowerCase();
+            const contractAddr = CONFIG.STAKING_CONTRACT.toLowerCase();
 
             // 按时间排序
             const sorted = [...transfers].sort((a, b) => a.timestamp - b.timestamp);
@@ -866,7 +873,7 @@
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: '每日质押量 (LAX)',
+                        label: '每日质押量 (USDT)',
                         data: values,
                         borderColor: '#f39c12',
                         backgroundColor: gradient,
@@ -883,7 +890,7 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return context.parsed.y.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' LAX';
+                                    return context.parsed.y.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' USDT';
                                 }
                             }
                         }
