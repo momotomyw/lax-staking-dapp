@@ -1,0 +1,21 @@
+{
+  "rewrites": [
+    {
+      "source": "/user-dapp",
+      "destination": "/user-dapp/index.html"
+    },
+    {
+      "source": "/user-dapp/",
+      "destination": "/user-dapp/index.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin/index.html"
+    },
+    {
+      "source": "/admin/",
+      "destination": "/admin/index.html"
+    }
+  ],
+  "trailingSlash": true
+}
