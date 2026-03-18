@@ -486,12 +486,27 @@
 
         // 格式化 USDT
         function formatUSDT(bigIntValue) {
-            const num = Number(bigIntValue) / Math.pow(10, CONFIG.DECIMALS);
+            // 使用 ethers.js 的格式化函数处理大数
+            let num;
+            if (typeof bigIntValue === 'object' && bigIntValue._isBigNumber) {
+                num = parseFloat(ethers.utils.formatUnits(bigIntValue, CONFIG.DECIMALS));
+            } else if (typeof bigIntValue === 'bigint') {
+                num = Number(bigIntValue) / Math.pow(10, CONFIG.DECIMALS);
+            } else {
+                num = Number(bigIntValue) / Math.pow(10, CONFIG.DECIMALS);
+            }
+
+            if (isNaN(num) || !isFinite(num)) {
+                return '0.00';
+            }
+
             if (num >= 1000000) {
                 return (num / 1000000).toFixed(2) + 'M';
             } else if (num >= 1000) {
                 return (num / 1000).toFixed(2) + 'K';
             }
+            return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
             return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
