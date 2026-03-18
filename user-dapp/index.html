@@ -435,35 +435,52 @@
 
         // 连接钱包
         async function connectWallet() {
-            if (!window.ethereum) {
-                showMessage('请安装 MetaMask 钱包！', 'error');
+            // 检查多种钱包注入方式
+            const ethereum = window.ethereum || window.bitkeep?.ethereum || window.BinanceChain;
+
+            if (!ethereum) {
+                showMessage('请安装 MetaMask 或其他 Web3 钱包！<br><a href="https://metamask.io/download/" target="_blank" style="color:#3498db">下载 MetaMask</a>', 'error');
                 return;
             }
 
             try {
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                const accounts = await provider.send('eth_requestAccounts', []);
+                // 显示连接中状态
+                const btn = document.getElementById('connectBtn');
+                btn.textContent = '连接中...';
+                btn.disabled = true;
+
+                provider = new ethers.providers.Web3Provider(ethereum);
+
+                // 请求账户连接
+                const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
                 signer = provider.getSigner();
                 userAddress = accounts[0];
 
                 // 检查网络
                 const network = await provider.getNetwork();
                 if (network.chainId !== CONFIG.BSC_CHAIN_ID) {
-                    showMessage('请切换到 BSC 主网！', 'error');
+                    showMessage('请切换到 BSC 主网（Chain ID: 56）！当前: ' + network.chainId, 'error');
                     // 尝试切换网络
                     try {
-                        await window.ethereum.request({
+                        await ethereum.request({
                             method: 'wallet_switchEthereumChain',
                             params: [{ chainId: '0x38' }]
                         });
+                        // 切换成功后重新连接
+                        setTimeout(() => connectWallet(), 1000);
                     } catch (switchError) {
                         console.error('切换网络失败:', switchError);
+                        if (switchError.code === 4902) {
+                            showMessage('请在钱包中添加 BSC 主网', 'error');
+                        }
                     }
+                    btn.textContent = '连接钱包';
+                    btn.disabled = false;
                     return;
                 }
 
                 // 更新UI
-                document.getElementById('connectBtn').style.display = 'none';
+                btn.style.display = 'none';
                 document.getElementById('addressDisplay').style.display = 'inline';
                 document.getElementById('addressDisplay').textContent =
                     userAddress.slice(0, 6) + '...' + userAddress.slice(-4);
@@ -473,12 +490,26 @@
                 document.getElementById('stakesCard').style.display = 'block';
                 document.getElementById('emailCard').style.display = 'block';
 
+                showMessage('钱包连接成功！', 'success');
+
                 // 加载数据
                 await loadUserData();
 
             } catch (error) {
                 console.error('连接钱包失败:', error);
-                showMessage('连接钱包失败: ' + error.message, 'error');
+                const btn = document.getElementById('connectBtn');
+                btn.textContent = '连接钱包';
+                btn.disabled = false;
+
+                let errorMsg = '连接钱包失败: ';
+                if (error.code === 4001) {
+                    errorMsg += '用户拒绝了连接请求';
+                } else if (error.code === -32002) {
+                    errorMsg += '请在钱包中确认连接请求';
+                } else {
+                    errorMsg += error.message;
+                }
+                showMessage(errorMsg, 'error');
             }
         }
 

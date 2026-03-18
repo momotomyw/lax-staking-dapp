@@ -382,7 +382,13 @@
             BSC_RPCS: [
                 'https://bsc-dataseed1.binance.org/',
                 'https://bsc-dataseed2.defibit.io/',
-                'https://bsc-dataseed3.ninicoin.io/'
+                'https://bsc-dataseed3.ninicoin.io/',
+                'https://bsc-dataseed4.ninicoin.io/',
+                'https://bsc-dataseed1.defibit.io/',
+                'https://bsc-dataseed2.binance.org/',
+                'https://bsc-dataseed3.binance.org/',
+                'https://bsc.publicnode.com',
+                'https://binance.llamarpc.com'
             ],
             SLOTS: {
                 totalStaked: '0x0',
@@ -399,6 +405,7 @@
         let trendChart = null;
         let dailyChart = null;
         let selectedDays = 7;
+        let connectionStatus = 'connecting';
 
         // 初始化
         async function init() {
@@ -408,26 +415,49 @@
             document.getElementById('maturityDate').value = today;
 
             await initProvider();
-            await loadAllData();
+            if (provider) {
+                await loadAllData();
+            }
         }
 
         // 初始化 Provider
         async function initProvider() {
+            connectionStatus = 'connecting';
+
             for (const rpc of CONFIG.BSC_RPCS) {
                 try {
-                    provider = new ethers.providers.JsonRpcProvider(rpc);
-                    await provider.getBlockNumber();
+                    const testProvider = new ethers.providers.JsonRpcProvider(rpc);
+                    // 设置超时
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Timeout')), 10000)
+                    );
+                    await Promise.race([
+                        testProvider.getBlockNumber(),
+                        timeoutPromise
+                    ]);
+
+                    provider = testProvider;
                     console.log('Connected to:', rpc);
+                    connectionStatus = 'connected';
+                    document.getElementById('lastUpdate').textContent = '已连接: ' + rpc;
                     return;
                 } catch (e) {
-                    console.log('Failed to connect:', rpc);
+                    console.log('Failed to connect:', rpc, e.message);
                 }
             }
-            throw new Error('无法连接到 BSC 网络');
+
+            connectionStatus = 'failed';
+            document.getElementById('lastUpdate').textContent = '❌ 无法连接 BSC 网络，请刷新重试';
+            console.error('无法连接到任何 BSC RPC');
         }
 
         // 加载所有数据
         async function loadAllData() {
+            if (!provider) {
+                console.error('Provider 未初始化');
+                return;
+            }
+
             try {
                 await Promise.all([
                     loadStakingDistribution(),
@@ -438,11 +468,16 @@
                 updateLastUpdate();
             } catch (error) {
                 console.error('加载数据失败:', error);
+                // 尝试重新连接
+                await initProvider();
             }
         }
 
         // 读取存储槽
         async function readSlot(slot) {
+            if (!provider) {
+                throw new Error('Provider 未初始化');
+            }
             const data = await provider.getStorageAt(CONFIG.STAKING_CONTRACT, slot);
             return ethers.BigNumber.from(data);
         }
