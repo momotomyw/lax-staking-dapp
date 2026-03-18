@@ -466,6 +466,39 @@
             document.getElementById('redeemDate').value = tomorrowStr;
         }
 
+        // 从合约存储槽读取质押数据并显示
+        async function displayStakingData() {
+            try {
+                // 读取存储槽数据
+                const [totalStaked, staked1d, staked7d, staked15d, staked30d] = await Promise.all([
+                    provider.getStorageAt(CONFIG.STAKING_CONTRACT, CONFIG.SLOTS.totalStaked),
+                    provider.getStorageAt(CONFIG.STAKING_CONTRACT, CONFIG.SLOTS.staked1d),
+                    provider.getStorageAt(CONFIG.STAKING_CONTRACT, CONFIG.SLOTS.staked7d),
+                    provider.getStorageAt(CONFIG.STAKING_CONTRACT, CONFIG.SLOTS.staked15d),
+                    provider.getStorageAt(CONFIG.STAKING_CONTRACT, CONFIG.SLOTS.staked30d)
+                ]);
+
+                // 转换为数值
+                const formatValue = (hexStr) => {
+                    const value = parseInt(hexStr, 16) / Math.pow(10, CONFIG.DECIMALS);
+                    return value.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                };
+
+                // 更新 UI
+                document.getElementById('staked1d').textContent = formatValue(staked1d);
+                document.getElementById('staked7d').textContent = formatValue(staked7d);
+                document.getElementById('staked15d').textContent = formatValue(staked15d);
+                document.getElementById('staked30d').textContent = formatValue(staked30d);
+                document.getElementById('dailyTotal').textContent = formatValue(totalStaked);
+
+                updateStatus('数据已加载 - ' + new Date().toLocaleTimeString('zh-CN'));
+
+            } catch (error) {
+                console.error('读取质押数据失败:', error);
+                updateStatus('读取数据失败: ' + error.message);
+            }
+        }
+
         // 加载并分析质押数据
         async function loadAndAnalyzeStakingData(days = 7, isBackground = false) {
             if (!isBackground) {
@@ -758,7 +791,7 @@
                 // 直接从合约存储槽读取最新数据
                 await displayStakingData();
 
-                updateStatus('数据已更新 - ' + new Date().toLocaleTimeString('zh-CN');
+                updateStatus('数据已更新 - ' + new Date().toLocaleTimeString('zh-CN'));
             } catch (error) {
                 updateStatus('查询失败: ' + error.message);
             }
