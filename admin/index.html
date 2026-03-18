@@ -484,7 +484,7 @@
             return ethers.BigNumber.from(data);
         }
 
-        // 格式化 USDT
+        // 格式化 USDT - 显示完整整数，带千分位分隔符
         function formatUSDT(bigIntValue) {
             // 使用 ethers.js 的格式化函数处理大数
             let num;
@@ -497,15 +497,11 @@
             }
 
             if (isNaN(num) || !isFinite(num)) {
-                return '0.00';
+                return '0';
             }
 
-            if (num >= 1000000) {
-                return (num / 1000000).toFixed(2) + 'M';
-            } else if (num >= 1000) {
-                return (num / 1000).toFixed(2) + 'K';
-            }
-            return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            // 显示完整整数，带千分位分隔符
+            return Math.floor(num).toLocaleString('zh-CN');
         }
 
         // 加载质押分布
@@ -658,12 +654,26 @@
             const dateStr = document.getElementById('statDate').value;
             if (!dateStr) return;
 
-            // 实际应该从事件日志计算该日期的质押数据
-            // 这里显示提示信息
-            document.getElementById('daily1d').textContent = '需链上数据';
-            document.getElementById('daily7d').textContent = '需链上数据';
-            document.getElementById('daily15d').textContent = '需链上数据';
-            document.getElementById('daily30d').textContent = '需链上数据';
+            // 显示当前质押分布数据（从存储槽读取）
+            try {
+                const [staked1d, staked7d, staked15d, staked30d] = await Promise.all([
+                    readSlot(CONFIG.SLOTS.staked1d),
+                    readSlot(CONFIG.SLOTS.staked7d),
+                    readSlot(CONFIG.SLOTS.staked15d),
+                    readSlot(CONFIG.SLOTS.staked30d)
+                ]);
+
+                document.getElementById('daily1d').textContent = formatUSDT(staked1d);
+                document.getElementById('daily7d').textContent = formatUSDT(staked7d);
+                document.getElementById('daily15d').textContent = formatUSDT(staked15d);
+                document.getElementById('daily30d').textContent = formatUSDT(staked30d);
+            } catch (error) {
+                console.error('加载每日统计失败:', error);
+                document.getElementById('daily1d').textContent = '加载失败';
+                document.getElementById('daily7d').textContent = '加载失败';
+                document.getElementById('daily15d').textContent = '加载失败';
+                document.getElementById('daily30d').textContent = '加载失败';
+            }
 
             // 加载每日图表
             await loadDailyChart();
@@ -732,8 +742,40 @@
 
             document.getElementById('maturityResult').style.display = 'block';
 
-            // 实际应该从链上数据计算
-            document.getElementById('maturityAmount').textContent = '需链上事件数据';
+            // 计算到指定日期的到期金额
+            const targetDate = new Date(dateStr);
+            const today = new Date();
+            const daysDiff = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+
+            try {
+                const [staked1d, staked7d, staked15d, staked30d] = await Promise.all([
+                    readSlot(CONFIG.SLOTS.staked1d),
+                    readSlot(CONFIG.SLOTS.staked7d),
+                    readSlot(CONFIG.SLOTS.staked15d),
+                    readSlot(CONFIG.SLOTS.staked30d)
+                ]);
+
+                let maturityAmount = ethers.BigNumber.from(0);
+
+                // 根据天数计算到期金额
+                if (daysDiff <= 1) {
+                    maturityAmount = maturityAmount.add(staked1d);
+                }
+                if (daysDiff <= 7) {
+                    maturityAmount = maturityAmount.add(staked7d);
+                }
+                if (daysDiff <= 15) {
+                    maturityAmount = maturityAmount.add(staked15d);
+                }
+                if (daysDiff <= 30) {
+                    maturityAmount = maturityAmount.add(staked30d);
+                }
+
+                document.getElementById('maturityAmount').textContent = formatUSDT(maturityAmount);
+            } catch (error) {
+                console.error('查询到期金额失败:', error);
+                document.getElementById('maturityAmount').textContent = '查询失败';
+            }
         }
 
         // 切换标签页
