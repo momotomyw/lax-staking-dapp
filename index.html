@@ -484,12 +484,12 @@
                     return value.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 };
 
-                // 更新 UI
-                document.getElementById('staked1d').textContent = formatValue(staked1d);
-                document.getElementById('staked7d').textContent = formatValue(staked7d);
-                document.getElementById('staked15d').textContent = formatValue(staked15d);
-                document.getElementById('staked30d').textContent = formatValue(staked30d);
-                document.getElementById('dailyTotal').textContent = formatValue(totalStaked);
+                // 更新 UI（使用正确的元素 ID）
+                document.getElementById('stake1d').textContent = formatValue(staked1d);
+                document.getElementById('stake7d').textContent = formatValue(staked7d);
+                document.getElementById('stake15d').textContent = formatValue(staked15d);
+                document.getElementById('stake30d').textContent = formatValue(staked30d);
+                document.getElementById('stakeTotal').textContent = formatValue(totalStaked);
 
                 updateStatus('数据已加载 - ' + new Date().toLocaleTimeString('zh-CN'));
 
