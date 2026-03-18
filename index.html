@@ -376,8 +376,10 @@
     <script>
         // 配置
         const CONFIG = {
-            // 质押合约地址
+            // 质押合约地址 (LAX Token)
             STAKING_CONTRACT: '0x7f9bd73e51e66e0b2c7a87db0ca530a11eb7a7e9',
+            // USDT 代币合约
+            USDT_CONTRACT: '0x55d398326f99059fF775485246999027B3197955',
             // 存储槽位置（基于合约分析）
             SLOTS: {
                 totalStaked: '0x0',
@@ -392,7 +394,9 @@
                 'https://bsc-dataseed1.defibit.io/',
                 'https://bsc-dataseed2.defibit.io/'
             ],
-            DECIMALS: 18
+            DECIMALS: 18,
+            BLOCKS_PER_DAY: 28800,
+            MAX_BLOCKS_PER_REQUEST: 5000
         };
 
         // Transfer 事件签名
