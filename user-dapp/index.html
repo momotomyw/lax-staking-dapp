@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LAX 质押 DApp</title>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .card {
+            background: rgba(255,255,255,0.08);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .card h2 {
+            color: #f39c12;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn {
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+            border: none;
+            color: white;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+        .btn:hover { transform: scale(1.02); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .btn-success { background: linear-gradient(90deg, #27ae60, #2ecc71); }
+        .btn-danger { background: linear-gradient(90deg, #c0392b, #e74c3c); }
+        input, select {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            padding: 12px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            width: 100%;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #f39c12;
+        }
+        select option { background: #1a1a2e; color: #fff; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #888;
+            font-size: 0.9em;
+        }
+        .wallet-info {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .address {
+            font-family: monospace;
+            background: rgba(0,0,0,0.3);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #2ecc71;
+        }
+        .balance {
+            font-size: 1.1em;
+            color: #f39c12;
+        }
+        .stake-options {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .stake-option {
+            background: rgba(255,255,255,0.05);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .stake-option:hover { border-color: #f39c12; }
+        .stake-option.selected {
+            border-color: #f39c12;
+            background: rgba(243, 156, 18, 0.15);
+        }
+        .stake-option .days {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #f39c12;
+        }
+        .stake-option .label {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 5px;
+        }
+        .stakes-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .stakes-table th, .stakes-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .stakes-table th {
+            color: #888;
+            font-weight: 500;
+            font-size: 0.85em;
+        }
+        .stakes-table tr:hover {
+            background: rgba(255,255,255,0.03);
+        }
+        .status {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.8em;
+        }
+        .status.active { background: rgba(243, 156, 18, 0.2); color: #f39c12; }
+        .status.mature { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
+        .loading {
+            text-align: center;
+            color: #f39c12;
+            padding: 40px;
+        }
+        .error {
+            background: rgba(231, 76, 60, 0.2);
+            color: #e74c3c;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .success {
+            background: rgba(46, 204, 113, 0.2);
+            color: #2ecc71;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal.show { display: flex; }
+        .modal-content {
+            background: #1a1a2e;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 450px;
+            width: 90%;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-header h3 { color: #f39c12; }
+        .close-btn {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        .info-item {
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .info-value {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #f39c12;
+        }
+        .info-label {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 5px;
+        }
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.05);
+            border: none;
+            color: #888;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            background: rgba(243, 156, 18, 0.2);
+            color: #f39c12;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+        .tx-status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+        .tx-status.pending { background: rgba(243, 156, 18, 0.2); color: #f39c12; }
+        .tx-status.success { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
+        .tx-status.error { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
+        .email-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+        .email-status.configured { color: #2ecc71; }
+        .email-status.not-configured { color: #888; }
+        @media (max-width: 600px) {
+            .stake-options { grid-template-columns: repeat(2, 1fr); }
+            .info-grid { grid-template-columns: 1fr; }
+            .wallet-info { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 LAX 质押 DApp</h1>
+
+        <!-- 钱包连接区域 -->
+        <div class="card">
+            <div class="wallet-info">
+                <div>
+                    <button id="connectBtn" class="btn" onclick="connectWallet()">连接钱包</button>
+                    <span id="addressDisplay" class="address" style="display:none;"></span>
+                </div>
+                <div class="balance" id="balanceDisplay">
+                    USDT 余额: --
+                </div>
+            </div>
+        </div>
+
+        <!-- 消息区域 -->
+        <div id="messageArea"></div>
+
+        <!-- 质押操作 -->
+        <div class="card" id="stakeCard" style="display:none;">
+            <h2>💰 质押 USDT</h2>
+
+            <div class="info-grid" style="margin-bottom: 20px;">
+                <div class="info-item">
+                    <div class="info-value" id="totalStakedInfo">--</div>
+                    <div class="info-label">总质押量</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-value" id="myStakedInfo">--</div>
+                    <div class="info-label">我的质押</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>选择锁定期</label>
+                <div class="stake-options">
+                    <div class="stake-option selected" data-days="1" onclick="selectPeriod(this)">
+                        <div class="days">1</div>
+                        <div class="label">天</div>
+                    </div>
+                    <div class="stake-option" data-days="7" onclick="selectPeriod(this)">
+                        <div class="days">7</div>
+                        <div class="label">天</div>
+                    </div>
+                    <div class="stake-option" data-days="15" onclick="selectPeriod(this)">
+                        <div class="days">15</div>
+                        <div class="label">天</div>
+                    </div>
+                    <div class="stake-option" data-days="30" onclick="selectPeriod(this)">
+                        <div class="days">30</div>
+                        <div class="label">天</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>质押金额 (USDT)</label>
+                <input type="number" id="stakeAmount" placeholder="输入金额" step="0.01" min="1">
+            </div>
+
+            <button class="btn btn-success" onclick="doStake()" id="stakeBtn">质押</button>
+            <div id="stakeStatus"></div>
+        </div>
+
+        <!-- 我的质押记录 -->
+        <div class="card" id="stakesCard" style="display:none;">
+            <h2>📋 我的质押记录</h2>
+            <div id="stakesList">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+
+        <!-- 邮件提醒设置 -->
+        <div class="card" id="emailCard" style="display:none;">
+            <h2>📧 到期提醒设置</h2>
+            <p style="color: #888; margin-bottom: 15px; font-size: 0.9em;">
+                设置163邮箱授权码，在质押到期前收到邮件提醒
+            </p>
+            <div class="email-status" id="emailStatus">
+                <span class="not-configured">未配置</span>
+            </div>
+            <button class="btn btn-secondary" onclick="showEmailModal()">配置邮件提醒</button>
+        </div>
+    </div>
+
+    <!-- 邮件配置弹窗 -->
+    <div class="modal" id="emailModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>配置邮件提醒</h3>
+                <button class="close-btn" onclick="hideEmailModal()">&times;</button>
+            </div>
+            <div class="form-group">
+                <label>163邮箱地址</label>
+                <input type="email" id="emailAddress" placeholder="your@163.com">
+            </div>
+            <div class="form-group">
+                <label>授权码 (SMTP Token)</label>
+                <input type="password" id="emailToken" placeholder="输入163邮箱授权码">
+            </div>
+            <div class="form-group">
+                <label>提醒时间 (到期前)</label>
+                <select id="reminderDays">
+                    <option value="1">1 天</option>
+                    <option value="2" selected>2 天</option>
+                    <option value="3">3 天</option>
+                    <option value="7">7 天</option>
+                </select>
+            </div>
+            <p style="color: #888; font-size: 0.8em; margin-bottom: 15px;">
+                提示：授权码需在163邮箱设置中开启SMTP服务后获取
+            </p>
+            <button class="btn" onclick="saveEmailSettings()">保存设置</button>
+        </div>
+    </div>
+
+    <script>
+        // 配置
+        const CONFIG = {
+            LAX_TOKEN: '0x7f9bd73e51e66e0b2c7a87db0ca530a11eb7a7e9',
+            STAKING_CONTRACT: '0x3790715d5458397600f524Dbe8269b7498F6A9Fe',
+            USDT_CONTRACT: '0x55d398326f99059fF775485246999027B3197955',
+            BSC_CHAIN_ID: 56,
+            DECIMALS: 18
+        };
+
+        // USDT ABI (简化版)
+        const USDT_ABI = [
+            'function balanceOf(address owner) view returns (uint256)',
+            'function approve(address spender, uint256 amount) returns (bool)',
+            'function allowance(address owner, address spender) view returns (uint256)',
+            'function decimals() view returns (uint8)'
+        ];
+
+        // 质押合约 ABI (根据实际合约调整)
+        const STAKING_ABI = [
+            'function stake(uint256 amount, uint256 lockDays) external',
+            'function unstake(uint256 stakeIndex) external',
+            'function getUserStakes(address user) view returns (tuple(uint256 amount, uint256 lockDays, uint256 startTime, bool withdrawn)[])',
+            'function totalStaked() view returns (uint256)',
+            'function userStakedAmount(address user) view returns (uint256)'
+        ];
+
+        let provider = null;
+        let signer = null;
+        let userAddress = null;
+        let selectedDays = 1;
+
+        // 显示消息
+        function showMessage(msg, type = 'info') {
+            const area = document.getElementById('messageArea');
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : '';
+            area.innerHTML = `<div class="${className}">${msg}</div>`;
+            setTimeout(() => area.innerHTML = '', 5000);
+        }
+
+        // 连接钱包
+        async function connectWallet() {
+            if (!window.ethereum) {
+                showMessage('请安装 MetaMask 钱包！', 'error');
+                return;
+            }
+
+            try {
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                const accounts = await provider.send('eth_requestAccounts', []);
+                signer = provider.getSigner();
+                userAddress = accounts[0];
+
+                // 检查网络
+                const network = await provider.getNetwork();
+                if (network.chainId !== CONFIG.BSC_CHAIN_ID) {
+                    showMessage('请切换到 BSC 主网！', 'error');
+                    // 尝试切换网络
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: '0x38' }]
+                        });
+                    } catch (switchError) {
+                        console.error('切换网络失败:', switchError);
+                    }
+                    return;
+                }
+
+                // 更新UI
+                document.getElementById('connectBtn').style.display = 'none';
+                document.getElementById('addressDisplay').style.display = 'inline';
+                document.getElementById('addressDisplay').textContent =
+                    userAddress.slice(0, 6) + '...' + userAddress.slice(-4);
+
+                // 显示功能区域
+                document.getElementById('stakeCard').style.display = 'block';
+                document.getElementById('stakesCard').style.display = 'block';
+                document.getElementById('emailCard').style.display = 'block';
+
+                // 加载数据
+                await loadUserData();
+
+            } catch (error) {
+                console.error('连接钱包失败:', error);
+                showMessage('连接钱包失败: ' + error.message, 'error');
+            }
+        }
+
+        // 加载用户数据
+        async function loadUserData() {
+            try {
+                const usdtContract = new ethers.Contract(CONFIG.USDT_CONTRACT, USDT_ABI, provider);
+                const balance = await usdtContract.balanceOf(userAddress);
+                const decimals = await usdtContract.decimals();
+
+                document.getElementById('balanceDisplay').textContent =
+                    'USDT 余额: ' + ethers.utils.formatUnits(balance, decimals);
+
+                // 尝试读取总质押量
+                try {
+                    const stakingContract = new ethers.Contract(CONFIG.STAKING_CONTRACT, STAKING_ABI, provider);
+                    const totalStaked = await stakingContract.totalStaked();
+                    document.getElementById('totalStakedInfo').textContent =
+                        formatUSDT(totalStaked);
+                } catch (e) {
+                    // 如果合约函数不存在，通过存储槽读取
+                    const slotData = await provider.getStorageAt(CONFIG.STAKING_CONTRACT, '0x0');
+                    const totalStaked = ethers.BigNumber.from(slotData);
+                    document.getElementById('totalStakedInfo').textContent = formatUSDT(totalStaked);
+                }
+
+                // 加载我的质押记录
+                await loadMyStakes();
+
+            } catch (error) {
+                console.error('加载数据失败:', error);
+            }
+        }
+
+        // 加载我的质押记录
+        async function loadMyStakes() {
+            const listDiv = document.getElementById('stakesList');
+
+            try {
+                const stakingContract = new ethers.Contract(CONFIG.STAKING_CONTRACT, STAKING_ABI, provider);
+
+                // 尝试获取用户质押
+                let stakes = [];
+                try {
+                    stakes = await stakingContract.getUserStakes(userAddress);
+                } catch (e) {
+                    // 合约可能不支持这个函数
+                    listDiv.innerHTML = `
+                        <div class="empty-state">
+                            <p>无法从合约读取质押记录</p>
+                            <p style="font-size: 0.85em; margin-top: 10px;">
+                                请在 <a href="https://bscscan.com/address/${CONFIG.STAKING_CONTRACT}" target="_blank" style="color: #f39c12;">
+                                BscScan</a> 查看您的质押状态
+                            </p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                if (stakes.length === 0) {
+                    listDiv.innerHTML = '<div class="empty-state">暂无质押记录</div>';
+                    document.getElementById('myStakedInfo').textContent = '0 USDT';
+                    return;
+                }
+
+                let totalMyStaked = ethers.BigNumber.from(0);
+                const now = Math.floor(Date.now() / 1000);
+                let html = '<table class="stakes-table"><thead><tr>';
+                html += '<th>金额</th><th>锁定期</th><th>开始时间</th><th>到期时间</th><th>状态</th><th>操作</th>';
+                html += '</tr></thead><tbody>';
+
+                for (let i = 0; i < stakes.length; i++) {
+                    const stake = stakes[i];
+                    const amount = stake.amount || stake[0];
+                    const lockDays = stake.lockDays || stake[1];
+                    const startTime = stake.startTime || stake[2];
+                    const withdrawn = stake.withdrawn || stake[3];
+
+                    const amountNum = ethers.BigNumber.from(amount);
+                    const startTimeNum = ethers.BigNumber.from(startTime).toNumber();
+                    const lockSeconds = lockDays.toNumber() * 86400;
+                    const endTime = startTimeNum + lockSeconds;
+                    const isMature = now >= endTime && !withdrawn;
+
+                    if (!withdrawn) {
+                        totalMyStaked = totalMyStaked.add(amountNum);
+                    }
+
+                    html += '<tr>';
+                    html += `<td>${formatUSDT(amountNum)}</td>`;
+                    html += `<td>${lockDays.toNumber()} 天</td>`;
+                    html += `<td>${formatDate(startTimeNum)}</td>`;
+                    html += `<td>${formatDate(endTime)}</td>`;
+                    html += `<td><span class="status ${withdrawn ? '' : (isMature ? 'mature' : 'active')}">${withdrawn ? '已解押' : (isMature ? '可解押' : '质押中')}</span></td>`;
+                    html += `<td>${isMature ? `<button class="btn btn-danger" onclick="doUnstake(${i})">解押</button>` : '-'}</td>`;
+                    html += '</tr>';
+                }
+
+                html += '</tbody></table>';
+                listDiv.innerHTML = html;
+
+                document.getElementById('myStakedInfo').textContent = formatUSDT(totalMyStaked);
+
+            } catch (error) {
+                console.error('加载质押记录失败:', error);
+                listDiv.innerHTML = `<div class="error">加载失败: ${error.message}</div>`;
+            }
+        }
+
+        // 选择质押期限
+        function selectPeriod(element) {
+            document.querySelectorAll('.stake-option').forEach(el => el.classList.remove('selected'));
+            element.classList.add('selected');
+            selectedDays = parseInt(element.dataset.days);
+        }
+
+        // 执行质押
+        async function doStake() {
+            const amountStr = document.getElementById('stakeAmount').value;
+            if (!amountStr || parseFloat(amountStr) <= 0) {
+                showMessage('请输入有效的质押金额', 'error');
+                return;
+            }
+
+            const statusDiv = document.getElementById('stakeStatus');
+            const stakeBtn = document.getElementById('stakeBtn');
+            stakeBtn.disabled = true;
+
+            try {
+                const usdtContract = new ethers.Contract(CONFIG.USDT_CONTRACT, USDT_ABI, signer);
+                const stakingContract = new ethers.Contract(CONFIG.STAKING_CONTRACT, STAKING_ABI, signer);
+
+                const decimals = await usdtContract.decimals();
+                const amount = ethers.utils.parseUnits(amountStr, decimals);
+
+                // 1. 检查并授权
+                statusDiv.innerHTML = '<div class="tx-status pending">检查授权额度...</div>';
+                const allowance = await usdtContract.allowance(userAddress, CONFIG.STAKING_CONTRACT);
+
+                if (allowance.lt(amount)) {
+                    statusDiv.innerHTML = '<div class="tx-status pending">正在授权 USDT...</div>';
+                    const approveTx = await usdtContract.approve(CONFIG.STAKING_CONTRACT, amount);
+                    statusDiv.innerHTML = `<div class="tx-status pending">授权交易已提交，等待确认...<br>TX: ${approveTx.hash.slice(0, 10)}...</div>`;
+                    await approveTx.wait();
+                    statusDiv.innerHTML = '<div class="tx-status success">授权成功！</div>';
+                }
+
+                // 2. 执行质押
+                statusDiv.innerHTML = '<div class="tx-status pending">正在质押...</div>';
+                const stakeTx = await stakingContract.stake(amount, selectedDays);
+                statusDiv.innerHTML = `<div class="tx-status pending">质押交易已提交，等待确认...<br>TX: ${stakeTx.hash.slice(0, 10)}...</div>`;
+                await stakeTx.wait();
+
+                statusDiv.innerHTML = `<div class="tx-status success">质押成功！<br><a href="https://bscscan.com/tx/${stakeTx.hash}" target="_blank" style="color: #3498db;">查看交易</a></div>`;
+
+                // 刷新数据
+                document.getElementById('stakeAmount').value = '';
+                await loadUserData();
+
+            } catch (error) {
+                console.error('质押失败:', error);
+                statusDiv.innerHTML = `<div class="tx-status error">质押失败: ${error.message}</div>`;
+            }
+
+            stakeBtn.disabled = false;
+        }
+
+        // 执行解押
+        async function doUnstake(stakeIndex) {
+            if (!confirm('确定要解押这笔质押吗？')) return;
+
+            try {
+                showMessage('正在解押...', 'info');
+
+                const stakingContract = new ethers.Contract(CONFIG.STAKING_CONTRACT, STAKING_ABI, signer);
+                const tx = await stakingContract.unstake(stakeIndex);
+
+                showMessage(`解押交易已提交，等待确认... TX: ${tx.hash.slice(0, 10)}...`, 'info');
+                await tx.wait();
+
+                showMessage('解押成功！', 'success');
+                await loadUserData();
+
+            } catch (error) {
+                console.error('解押失败:', error);
+                showMessage('解押失败: ' + error.message, 'error');
+            }
+        }
+
+        // 邮件设置相关
+        function showEmailModal() {
+            const settings = getEmailSettings();
+            if (settings) {
+                document.getElementById('emailAddress').value = settings.email || '';
+                document.getElementById('emailToken').value = settings.token || '';
+                document.getElementById('reminderDays').value = settings.reminderDays || '2';
+            }
+            document.getElementById('emailModal').classList.add('show');
+        }
+
+        function hideEmailModal() {
+            document.getElementById('emailModal').classList.remove('show');
+        }
+
+        function getEmailSettings() {
+            try {
+                const data = localStorage.getItem('lax_email_settings');
+                return data ? JSON.parse(data) : null;
+            } catch {
+                return null;
+            }
+        }
+
+        function saveEmailSettings() {
+            const email = document.getElementById('emailAddress').value;
+            const token = document.getElementById('emailToken').value;
+            const reminderDays = document.getElementById('reminderDays').value;
+
+            if (!email || !token) {
+                alert('请填写邮箱和授权码');
+                return;
+            }
+
+            localStorage.setItem('lax_email_settings', JSON.stringify({
+                email, token, reminderDays
+            }));
+
+            updateEmailStatus();
+            hideEmailModal();
+            showMessage('邮件设置已保存！', 'success');
+        }
+
+        function updateEmailStatus() {
+            const settings = getEmailSettings();
+            const statusDiv = document.getElementById('emailStatus');
+            if (settings && settings.email) {
+                statusDiv.innerHTML = `<span class="configured">✓ 已配置: ${settings.email} (到期前 ${settings.reminderDays} 天提醒)</span>`;
+            } else {
+                statusDiv.innerHTML = '<span class="not-configured">未配置</span>';
+            }
+        }
+
+        // 工具函数
+        function formatUSDT(bigIntValue) {
+            const num = Number(bigIntValue) / 1e18;
+            return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USDT';
+        }
+
+        function formatDate(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // 检查已连接钱包
+        async function checkExistingConnection() {
+            if (window.ethereum) {
+                const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                if (accounts.length > 0) {
+                    await connectWallet();
+                }
+            }
+            updateEmailStatus();
+        }
+
+        // 监听账户变化
+        if (window.ethereum) {
+            window.ethereum.on('accountsChanged', (accounts) => {
+                if (accounts.length > 0) {
+                    connectWallet();
+                } else {
+                    location.reload();
+                }
+            });
+            window.ethereum.on('chainChanged', () => location.reload());
+        }
+
+        // 初始化
+        checkExistingConnection();
+    </script>
+</body>
+</html>

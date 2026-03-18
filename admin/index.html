@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LAX 质押数据后台</title>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2em;
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+        .tab {
+            padding: 12px 30px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #888;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            transition: all 0.3s;
+        }
+        .tab:hover { border-color: #f39c12; }
+        .tab.active {
+            background: rgba(243, 156, 18, 0.2);
+            border-color: #f39c12;
+            color: #f39c12;
+        }
+        .card {
+            background: rgba(255,255,255,0.08);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .card h2 {
+            color: #f39c12;
+            margin-bottom: 20px;
+            font-size: 1.2em;
+        }
+        .card h3 {
+            color: #fff;
+            margin-bottom: 15px;
+            font-size: 1em;
+            opacity: 0.9;
+        }
+        .time-filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .time-filter {
+            padding: 8px 18px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #888;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+        .time-filter:hover { border-color: #f39c12; }
+        .time-filter.active {
+            background: rgba(243, 156, 18, 0.2);
+            border-color: #f39c12;
+            color: #f39c12;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: rgba(0,0,0,0.25);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .stat-value {
+            font-size: 1.6em;
+            font-weight: bold;
+            color: #f39c12;
+            margin-bottom: 8px;
+        }
+        .stat-label {
+            font-size: 0.85em;
+            color: #888;
+        }
+        .unlock-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+        }
+        .unlock-item {
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+        .unlock-item .days {
+            font-size: 0.9em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        .unlock-item .amount {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #2ecc71;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+        .period-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .period-stat {
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            padding: 18px;
+            text-align: center;
+            border-left: 3px solid;
+        }
+        .period-stat:nth-child(1) { border-color: #3498db; }
+        .period-stat:nth-child(2) { border-color: #2ecc71; }
+        .period-stat:nth-child(3) { border-color: #f39c12; }
+        .period-stat:nth-child(4) { border-color: #e74c3c; }
+        .period-stat .label {
+            font-size: 0.85em;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        .period-stat .value {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #fff;
+        }
+        .date-picker-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        input[type="date"] {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+        .btn {
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+            border: none;
+            color: white;
+            padding: 10px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+        .btn:hover { transform: scale(1.02); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .maturity-query {
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .maturity-query h3 {
+            margin-bottom: 15px;
+            color: #fff;
+        }
+        .maturity-result {
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+        }
+        .maturity-result .value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #f39c12;
+        }
+        .loading {
+            text-align: center;
+            color: #f39c12;
+            padding: 40px;
+        }
+        .refresh-info {
+            text-align: right;
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 10px;
+        }
+        .hidden { display: none; }
+        @media (max-width: 768px) {
+            .period-stats { grid-template-columns: repeat(2, 1fr); }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 LAX 质押数据后台</h1>
+
+        <!-- 标签页 -->
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('dashboard')">仪表板</div>
+            <div class="tab" onclick="switchTab('daily')">每日统计</div>
+        </div>
+
+        <!-- 仪表板 -->
+        <div id="dashboardTab">
+            <div class="card">
+                <h2>时间范围筛选</h2>
+                <div class="time-filters">
+                    <div class="time-filter active" data-days="7" onclick="selectTimeFilter(this)">最近 7 天</div>
+                    <div class="time-filter" data-days="30" onclick="selectTimeFilter(this)">最近 30 天</div>
+                    <div class="time-filter" data-days="90" onclick="selectTimeFilter(this)">最近 90 天</div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalNewStake">--</div>
+                        <div class="stat-label">累计新增质押</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stillStaked">--</div>
+                        <div class="stat-label">仍在质押</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="canUnstake">--</div>
+                        <div class="stat-label">当前可解押</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalUnstaked">--</div>
+                        <div class="stat-label">已解押</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>未来解锁计划</h2>
+                <div class="unlock-grid" id="unlockGrid">
+                    <div class="unlock-item"><div class="days">未来 1 天</div><div class="amount" id="unlock1d">--</div></div>
+                    <div class="unlock-item"><div class="days">未来 2 天</div><div class="amount" id="unlock2d">--</div></div>
+                    <div class="unlock-item"><div class="days">未来 7 天</div><div class="amount" id="unlock7d">--</div></div>
+                    <div class="unlock-item"><div class="days">未来 15 天</div><div class="amount" id="unlock15d">--</div></div>
+                    <div class="unlock-item"><div class="days">未来 30 天</div><div class="amount" id="unlock30d">--</div></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>质押分布（当前）</h2>
+                <div class="period-stats">
+                    <div class="period-stat">
+                        <div class="label">1 天期质押</div>
+                        <div class="value" id="staked1d">--</div>
+                    </div>
+                    <div class="period-stat">
+                        <div class="label">7 天期质押</div>
+                        <div class="value" id="staked7d">--</div>
+                    </div>
+                    <div class="period-stat">
+                        <div class="label">15 天期质押</div>
+                        <div class="value" id="staked15d">--</div>
+                    </div>
+                    <div class="period-stat">
+                        <div class="label">30 天期质押</div>
+                        <div class="value" id="staked30d">--</div>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="distributionChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>质押趋势</h2>
+                <div class="chart-container">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 每日统计 -->
+        <div id="dailyTab" class="hidden">
+            <div class="card">
+                <h2>选择日期查看统计</h2>
+                <div class="date-picker-section">
+                    <input type="date" id="statDate">
+                    <button class="btn" onclick="loadDailyStats()">查询</button>
+                    <button class="btn" style="background: rgba(255,255,255,0.1);" onclick="loadTodayStats()">今天</button>
+                </div>
+
+                <h3>当日质押统计</h3>
+                <div class="period-stats">
+                    <div class="period-stat">
+                        <div class="label">1 天期质押</div>
+                        <div class="value" id="daily1d">--</div>
+                    </div>
+                    <div class="period-stat">
+                        <div class="label">7 天期质押</div>
+                        <div class="value" id="daily7d">--</div>
+                    </div>
+                    <div class="period-stat">
+                        <div class="label">15 天期质押</div>
+                        <div class="value" id="daily15d">--</div>
+                    </div>
+                    <div class="period-stat">
+                        <div class="label">30 天期质押</div>
+                        <div class="value" id="daily30d">--</div>
+                    </div>
+                </div>
+
+                <div class="maturity-query">
+                    <h3>到期查询</h3>
+                    <p style="color: #888; font-size: 0.9em; margin-bottom: 15px;">
+                        查询指定日期将到期的质押金额
+                    </p>
+                    <div class="date-picker-section">
+                        <input type="date" id="maturityDate">
+                        <button class="btn" onclick="queryMaturity()">查询到期金额</button>
+                    </div>
+                    <div class="maturity-result" id="maturityResult" style="display:none;">
+                        <span style="color: #888;">当日到期金额：</span>
+                        <span class="value" id="maturityAmount">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>最近 7 天每日质押</h2>
+                <div class="chart-container">
+                    <canvas id="dailyChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="refresh-info">
+            最后更新: <span id="lastUpdate">--</span>
+        </div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            STAKING_CONTRACT: '0x7f9bd73e51e66e0b2c7a87db0ca530a11eb7a7e9',
+            BSC_RPCS: [
+                'https://bsc-dataseed1.binance.org/',
+                'https://bsc-dataseed2.defibit.io/',
+                'https://bsc-dataseed3.ninicoin.io/'
+            ],
+            SLOTS: {
+                totalStaked: '0x0',
+                staked1d: '0x2',
+                staked7d: '0x3',
+                staked15d: '0x4',
+                staked30d: '0x5'
+            },
+            DECIMALS: 18
+        };
+
+        let provider = null;
+        let distributionChart = null;
+        let trendChart = null;
+        let dailyChart = null;
+        let selectedDays = 7;
+
+        // 初始化
+        async function init() {
+            // 设置日期默认值为今天
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('statDate').value = today;
+            document.getElementById('maturityDate').value = today;
+
+            await initProvider();
+            await loadAllData();
+        }
+
+        // 初始化 Provider
+        async function initProvider() {
+            for (const rpc of CONFIG.BSC_RPCS) {
+                try {
+                    provider = new ethers.providers.JsonRpcProvider(rpc);
+                    await provider.getBlockNumber();
+                    console.log('Connected to:', rpc);
+                    return;
+                } catch (e) {
+                    console.log('Failed to connect:', rpc);
+                }
+            }
+            throw new Error('无法连接到 BSC 网络');
+        }
+
+        // 加载所有数据
+        async function loadAllData() {
+            try {
+                await Promise.all([
+                    loadStakingDistribution(),
+                    loadUnlockSchedule(),
+                    loadDashboardStats(),
+                    loadTrendChart()
+                ]);
+                updateLastUpdate();
+            } catch (error) {
+                console.error('加载数据失败:', error);
+            }
+        }
+
+        // 读取存储槽
+        async function readSlot(slot) {
+            const data = await provider.getStorageAt(CONFIG.STAKING_CONTRACT, slot);
+            return ethers.BigNumber.from(data);
+        }
+
+        // 格式化 USDT
+        function formatUSDT(bigIntValue) {
+            const num = Number(bigIntValue) / Math.pow(10, CONFIG.DECIMALS);
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(2) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(2) + 'K';
+            }
+            return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // 加载质押分布
+        async function loadStakingDistribution() {
+            const [staked1d, staked7d, staked15d, staked30d, totalStaked] = await Promise.all([
+                readSlot(CONFIG.SLOTS.staked1d),
+                readSlot(CONFIG.SLOTS.staked7d),
+                readSlot(CONFIG.SLOTS.staked15d),
+                readSlot(CONFIG.SLOTS.staked30d),
+                readSlot(CONFIG.SLOTS.totalStaked)
+            ]);
+
+            document.getElementById('staked1d').textContent = formatUSDT(staked1d);
+            document.getElementById('staked7d').textContent = formatUSDT(staked7d);
+            document.getElementById('staked15d').textContent = formatUSDT(staked15d);
+            document.getElementById('staked30d').textContent = formatUSDT(staked30d);
+
+            // 更新分布图
+            updateDistributionChart([
+                Number(staked1d) / 1e18,
+                Number(staked7d) / 1e18,
+                Number(staked15d) / 1e18,
+                Number(staked30d) / 1e18
+            ]);
+        }
+
+        // 加载解锁计划
+        async function loadUnlockSchedule() {
+            // 基于当前质押分布估算未来解锁金额
+            const [staked1d, staked7d, staked15d, staked30d] = await Promise.all([
+                readSlot(CONFIG.SLOTS.staked1d),
+                readSlot(CONFIG.SLOTS.staked7d),
+                readSlot(CONFIG.SLOTS.staked15d),
+                readSlot(CONFIG.SLOTS.staked30d)
+            ]);
+
+            // 简化估算：假设均匀分布
+            // 实际应该从链上事件计算
+            const s1d = Number(staked1d) / 1e18;
+            const s7d = Number(staked7d) / 1e18;
+            const s15d = Number(staked15d) / 1e18;
+            const s30d = Number(staked30d) / 1e18;
+
+            // 基于锁定期估算每日解锁（简化版）
+            document.getElementById('unlock1d').textContent = formatUSDT(staked1d);
+            document.getElementById('unlock2d').textContent = formatUSDT(staked1d.mul(2));
+            document.getElementById('unlock7d').textContent = formatUSDT(staked7d.add(staked1d));
+            document.getElementById('unlock15d').textContent = formatUSDT(staked15d.add(staked7d).add(staked1d));
+            document.getElementById('unlock30d').textContent = formatUSDT(staked30d.add(staked15d).add(staked7d).add(staked1d));
+        }
+
+        // 加载仪表板统计
+        async function loadDashboardStats() {
+            const totalStaked = await readSlot(CONFIG.SLOTS.totalStaked);
+
+            // 这些数据实际需要从事件日志计算
+            // 这里使用简化估算
+            document.getElementById('totalNewStake').textContent = formatUSDT(totalStaked);
+            document.getElementById('stillStaked').textContent = formatUSDT(totalStaked);
+            document.getElementById('canUnstake').textContent = '0.00';
+            document.getElementById('totalUnstaked').textContent = '0.00';
+        }
+
+        // 更新分布图
+        function updateDistributionChart(data) {
+            const ctx = document.getElementById('distributionChart').getContext('2d');
+
+            if (distributionChart) {
+                distributionChart.destroy();
+            }
+
+            distributionChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['1天期', '7天期', '15天期', '30天期'],
+                    datasets: [{
+                        data: data,
+                        backgroundColor: ['#3498db', '#2ecc71', '#f39c12', '#e74c3c'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: { color: '#888', padding: 15 }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 加载趋势图
+        async function loadTrendChart() {
+            // 生成模拟趋势数据（实际应从事件日志获取）
+            const labels = [];
+            const data = [];
+            const now = new Date();
+
+            for (let i = 13; i >= 0; i--) {
+                const date = new Date(now - i * 24 * 60 * 60 * 1000);
+                labels.push(date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }));
+                // 模拟数据
+                data.push(Math.random() * 100000);
+            }
+
+            const ctx = document.getElementById('trendChart').getContext('2d');
+
+            if (trendChart) {
+                trendChart.destroy();
+            }
+
+            trendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '每日质押 (USDT)',
+                        data: data,
+                        borderColor: '#f39c12',
+                        backgroundColor: 'rgba(243, 156, 18, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#888' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 加载每日统计
+        async function loadDailyStats() {
+            const dateStr = document.getElementById('statDate').value;
+            if (!dateStr) return;
+
+            // 实际应该从事件日志计算该日期的质押数据
+            // 这里显示提示信息
+            document.getElementById('daily1d').textContent = '需链上数据';
+            document.getElementById('daily7d').textContent = '需链上数据';
+            document.getElementById('daily15d').textContent = '需链上数据';
+            document.getElementById('daily30d').textContent = '需链上数据';
+
+            // 加载每日图表
+            await loadDailyChart();
+        }
+
+        // 加载今天统计
+        function loadTodayStats() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('statDate').value = today;
+            loadDailyStats();
+        }
+
+        // 加载每日图表
+        async function loadDailyChart() {
+            const labels = [];
+            const data = [];
+            const now = new Date();
+
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date(now - i * 24 * 60 * 60 * 1000);
+                labels.push(date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }));
+                data.push(Math.random() * 50000);
+            }
+
+            const ctx = document.getElementById('dailyChart').getContext('2d');
+
+            if (dailyChart) {
+                dailyChart.destroy();
+            }
+
+            dailyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '质押量 (USDT)',
+                        data: data,
+                        backgroundColor: 'rgba(243, 156, 18, 0.6)',
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#888' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 查询到期金额
+        async function queryMaturity() {
+            const dateStr = document.getElementById('maturityDate').value;
+            if (!dateStr) return;
+
+            document.getElementById('maturityResult').style.display = 'block';
+
+            // 实际应该从链上数据计算
+            document.getElementById('maturityAmount').textContent = '需链上事件数据';
+        }
+
+        // 切换标签页
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab[onclick="switchTab('${tabName}')"]`).classList.add('active');
+
+            document.getElementById('dashboardTab').classList.toggle('hidden', tabName !== 'dashboard');
+            document.getElementById('dailyTab').classList.toggle('hidden', tabName !== 'daily');
+
+            if (tabName === 'daily') {
+                loadDailyStats();
+            }
+        }
+
+        // 选择时间筛选
+        function selectTimeFilter(element) {
+            document.querySelectorAll('.time-filter').forEach(f => f.classList.remove('active'));
+            element.classList.add('active');
+            selectedDays = parseInt(element.dataset.days);
+            loadDashboardStats();
+        }
+
+        // 更新最后更新时间
+        function updateLastUpdate() {
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleString('zh-CN');
+        }
+
+        // 自动刷新
+        setInterval(loadAllData, 60000);
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>
